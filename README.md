@@ -56,6 +56,10 @@ The display must be clicked once on **INITIALIZE FRIEND COMPUTER** so the browse
 | `Space` | Blink |
 | `Esc` | Reset display |
 
+## Deployment status
+
+Vercel is connected to this repository. Milestone 1 is being visually verified from the `feat/v2-milestone-1` preview before merge to `main`.
+
 ## Milestone 2
 
 Milestone 2 adds Supabase Realtime as a cross-device transport so the controller can run from a phone/tablet while preserving the local transports above as show-safe fallbacks.
