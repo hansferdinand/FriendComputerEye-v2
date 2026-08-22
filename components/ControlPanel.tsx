@@ -10,7 +10,7 @@ import {
   type FriendCommand,
   type ThreatLevel,
 } from "@/lib/friend-computer";
-import { createCommandBus, type CommandBus } from "@/lib/transport";
+import { createCommandBus, type CommandBus, type RoomPresence } from "@/lib/transport";
 
 const PLAYER_STORAGE_KEY = "friend-computer-v2:player-names:v1";
 
@@ -23,9 +23,87 @@ const expressionLabels: Record<Expression, string> = {
   drugged: "Drugged",
 };
 
+type MacroStep = {
+  afterMs: number;
+  command: FriendCommand;
+};
+
+type QuickMacro = {
+  id: string;
+  label: string;
+  danger?: boolean;
+  stopsPatrol?: boolean;
+  steps: MacroStep[];
+};
+
+const QUICK_MACROS: QuickMacro[] = [
+  {
+    id: "friendly",
+    label: "Friendly",
+    steps: [
+      { afterMs: 0, command: { type: "set-expression", expression: "happy", intensity: 0.72 } },
+      { afterMs: 0, command: { type: "set-threat", level: "GREEN" } },
+      { afterMs: 0, command: { type: "set-status", text: "FRIEND COMPUTER IS PLEASED WITH YOUR COOPERATION" } },
+      { afterMs: 350, command: { type: "effect", effect: "blink" } },
+    ],
+  },
+  {
+    id: "concerned",
+    label: "Concerned",
+    steps: [
+      { afterMs: 0, command: { type: "set-expression", expression: "suspicious", intensity: 0.64 } },
+      { afterMs: 0, command: { type: "set-threat", level: "YELLOW" } },
+      { afterMs: 0, command: { type: "set-status", text: "FRIEND COMPUTER HAS NOTICED AN IRREGULARITY" } },
+      { afterMs: 220, command: { type: "effect", effect: "double-blink" } },
+    ],
+  },
+  {
+    id: "red-alert",
+    label: "Red Alert",
+    danger: true,
+    steps: [
+      { afterMs: 0, command: { type: "set-threat", level: "RED" } },
+      { afterMs: 0, command: { type: "set-expression", expression: "angry", intensity: 0.9 } },
+      { afterMs: 70, command: { type: "effect", effect: "glitch" } },
+      { afterMs: 150, command: { type: "set-status", text: "SECURITY ALERT: REMAIN WHERE YOU ARE" } },
+    ],
+  },
+  {
+    id: "interrogation",
+    label: "Interrogation",
+    danger: true,
+    stopsPatrol: true,
+    steps: [
+      { afterMs: 0, command: { type: "effect", effect: "interrogation" } },
+      { afterMs: 260, command: { type: "set-status", text: "HONEST CITIZENS ENJOY QUESTIONS" } },
+    ],
+  },
+  {
+    id: "propaganda",
+    label: "Propaganda Break",
+    steps: [
+      { afterMs: 0, command: { type: "set-expression", expression: "happy", intensity: 0.8 } },
+      { afterMs: 100, command: { type: "effect", effect: "random-ad" } },
+    ],
+  },
+  {
+    id: "all-clear",
+    label: "All Clear",
+    stopsPatrol: true,
+    steps: [
+      { afterMs: 0, command: { type: "effect", effect: "reset" } },
+      { afterMs: 180, command: { type: "set-status", text: "THANK YOU FOR YOUR COOPERATION, CITIZEN" } },
+      { afterMs: 360, command: { type: "set-expression", expression: "happy", intensity: 0.62 } },
+    ],
+  },
+];
+
 export function ControlPanel({ room }: { room: string }) {
   const busRef = useRef<CommandBus | null>(null);
+  const macroTimersRef = useRef<number[]>([]);
   const [transport, setTransport] = useState<CommandBus["transport"]>("connecting");
+  const [presence, setPresence] = useState<RoomPresence>({ displays: 0, controls: 0 });
+  const [activeMacro, setActiveMacro] = useState<string | null>(null);
   const [speech, setSpeech] = useState("");
   const [status, setStatus] = useState("");
   const [patrol, setPatrol] = useState(false);
@@ -52,7 +130,7 @@ export function ControlPanel({ room }: { room: string }) {
   }, [playerNames]);
 
   useEffect(() => {
-    const bus = createCommandBus(room, undefined, setTransport);
+    const bus = createCommandBus(room, undefined, setTransport, setPresence);
     busRef.current = bus;
     return () => {
       bus.close();
@@ -63,6 +141,30 @@ export function ControlPanel({ room }: { room: string }) {
   const send = useCallback((command: FriendCommand) => {
     busRef.current?.send(command);
   }, []);
+
+  const clearMacroTimers = useCallback(() => {
+    for (const timer of macroTimersRef.current) window.clearTimeout(timer);
+    macroTimersRef.current = [];
+  }, []);
+
+  useEffect(() => () => clearMacroTimers(), [clearMacroTimers]);
+
+  const runMacro = useCallback((macro: QuickMacro) => {
+    clearMacroTimers();
+    setActiveMacro(macro.id);
+    if (macro.stopsPatrol) setPatrol(false);
+
+    for (const step of macro.steps) {
+      if (step.afterMs === 0) {
+        send(step.command);
+      } else {
+        macroTimersRef.current.push(window.setTimeout(() => send(step.command), step.afterMs));
+      }
+    }
+
+    const lastStep = Math.max(...macro.steps.map((step) => step.afterMs), 0);
+    macroTimersRef.current.push(window.setTimeout(() => setActiveMacro(null), lastStep + 650));
+  }, [clearMacroTimers, send]);
 
   function targetPlayer(index: number) {
     const preset = PLAYER_PRESETS[index];
@@ -108,6 +210,20 @@ export function ControlPanel({ room }: { room: string }) {
             ? "LOCAL STORAGE FALLBACK"
             : "NO COMMAND BUS";
 
+  const displayOnline = transport === "realtime" && presence.displays > 0;
+  const presenceLabel =
+    transport === "realtime"
+      ? displayOnline
+        ? `DISPLAY ONLINE${presence.displays > 1 ? ` ×${presence.displays}` : ""}`
+        : "DISPLAY NOT DETECTED"
+      : "DISPLAY PRESENCE UNKNOWN";
+  const presenceClass =
+    transport === "realtime"
+      ? displayOnline
+        ? ""
+        : "connection-pill--warning"
+      : "connection-pill--muted";
+
   return (
     <main className="control-shell">
       <header className="control-header">
@@ -118,10 +234,27 @@ export function ControlPanel({ room }: { room: string }) {
         <div className="control-header-actions">
           <Link className="display-link" href={`/display/${encodeURIComponent(room)}`} target="_blank">OPEN DISPLAY ↗</Link>
           <div className={`connection-pill ${transport === "none" ? "connection-pill--bad" : ""}`}><i /> {transportLabel} · {roomLabel}</div>
+          <div className={`connection-pill ${presenceClass}`}><i /> {presenceLabel}</div>
         </div>
       </header>
 
       <div className="control-grid">
+        <section className="panel panel--macros">
+          <div className="panel-heading"><span>00</span><h2>Quick Procedures</h2></div>
+          <div className="macro-grid">
+            {QUICK_MACROS.map((macro) => (
+              <button
+                type="button"
+                key={macro.id}
+                className={`${macro.danger ? "danger" : ""} ${activeMacro === macro.id ? "is-active" : ""}`}
+                onClick={() => runMacro(macro)}
+              >
+                {macro.label}
+              </button>
+            ))}
+          </div>
+        </section>
+
         <section className="panel panel--players">
           <div className="panel-heading"><span>01</span><h2>Citizen Targeting</h2></div>
           <div className="player-grid">
