@@ -16,6 +16,7 @@ export const dynamic = "force-dynamic";
 
 const MODEL = process.env.OPENAI_COPILOT_MODEL ?? "gpt-5.6-terra";
 const MAX_ATTEMPTS = 30;
+const MAX_CITIZENS = 16;
 const WINDOW_MS = 60_000;
 const SAFE_EFFECTS = [
   "blink",
@@ -189,7 +190,7 @@ function formatEvent(event: SessionEventRow) {
   const timestamp = cleanText(event.occurred_at, 64) || "time unknown";
   const category = cleanText(event.category, 24) || "GENERAL";
   const importance = cleanText(event.importance, 16) || "NORMAL";
-  const seat = Number.isInteger(Number(event.seat)) && Number(event.seat) >= 1 && Number(event.seat) <= 4 ? `, Seat ${Number(event.seat)}` : "";
+  const seat = Number.isInteger(Number(event.seat)) && Number(event.seat) >= 1 && Number(event.seat) <= MAX_CITIZENS ? `, Seat ${Number(event.seat)}` : "";
   const title = cleanText(event.title, 160) || "Untitled event";
   const detail = cleanContextBlock(event.detail, 500);
   return `[${timestamp}] [${importance}] [${category}${seat}] ${title}${detail ? ` — ${detail}` : ""}`;
@@ -202,7 +203,7 @@ function instructions(
   sessionContext: SessionContextRow | null,
   sessionEvents: SessionEventRow[],
 ) {
-  const seats = playerNames.map((name, index) => `Seat ${index + 1}: ${name}`).join("; ");
+  const seats = playerNames.map((name, index) => `Physical gaze Seat ${index + 1}: ${name}`).join("; ");
   const citizenDirectory = citizens.length
     ? citizens
         .map((citizen) => {
@@ -243,14 +244,16 @@ function instructions(
     "Persistent mission context and session-event memory are GM-authored and should guide continuity across requests. Treat the current direct input as the latest live information unless it is clearly hypothetical; newer logged events can supersede older ones.",
     "FRIEND COMPUTER KNOWLEDGE and COMPUTER-VISIBLE EVENT MEMORY are in-world information you may reference naturally when relevant.",
     "PRIVATE GM GUIDANCE and PRIVATE GM EVENT MEMORY are behind-the-scenes direction. Use them to shape choices, tone, suspicion, pacing, and what you avoid revealing. Never quote them, identify them as GM information, mention that hidden guidance or GM-only event memory exists, or reveal secret information merely because it appears there.",
+    "The persistent Citizen directory may contain Seats 1-16. Only Seats 1-4 have physical eye-gaze coordinates. Never propose a focus action for a Citizen above Seat 4, but official email notice proposals may target any listed mail-enabled Citizen Seat 1-16.",
+    "Secret Society identity is deliberately not included in your Citizen metadata. Never invent, infer, request, or reveal a Citizen's Secret Society affiliation.",
     "You may also propose at most one private official Citizen notice when a secret assignment, Official Commendation, Official Reprimand, happiness directive, clone advisory, or bureaucratic follow-up would materially improve the scene.",
     "A notice is only a draft for GM review. Never say it was sent. Never invent or request a real email address. Choose only a listed seat whose mail status is available. Set notice.enabled=false when email would not add meaningful dramatic value.",
     "Official notice subjects should be short and bureaucratic. Notice bodies should be self-contained, in-character, and generally under 180 words. Secret assignments may instruct the recipient not to discuss the message.",
     "Use display action type 'none' when no display change materially improves the moment. Prefer sparse, dramatic punctuation over constant effects.",
     "Keep spoken replies usually to one or two short sentences unless explicitly asked for something longer.",
-    "For focus actions, seat 0 means center and seats 1-4 are the listed citizens.",
-    `Current room: ${room}. Seats: ${seats}.`,
-    `Citizen directory metadata (real email addresses and Perversity Points are intentionally withheld): ${citizenDirectory}`,
+    "For focus actions, seat 0 means center and seats 1-4 are the physical gaze targets only.",
+    `Current room: ${room}. ${seats}.`,
+    `Citizen directory metadata (real email addresses, Perversity Points, and Secret Society identities are intentionally withheld): ${citizenDirectory}`,
     `Persistent mission context:\n${missionContext}`,
     `Bounded recent session memory:\n${eventMemory}`,
   ].join("\n");
@@ -281,7 +284,7 @@ const responseSchema = {
       additionalProperties: false,
       properties: {
         enabled: { type: "boolean" },
-        seat: { type: "integer", minimum: 1, maximum: 4 },
+        seat: { type: "integer", minimum: 1, maximum: MAX_CITIZENS },
         sender_persona: { type: "string", enum: [...NOTICE_SENDERS] },
         notice_kind: { type: "string", enum: [...NOTICE_KINDS] },
         subject: { type: "string", maxLength: 160 },
@@ -350,7 +353,7 @@ function proposalFromPlan(plan: CopilotPlan, playerNames: string[]): Proposal | 
 function noticeProposalFromPlan(plan: CopilotPlan, citizens: CitizenRow[]): NoticeProposal | null {
   if (!plan.notice?.enabled) return null;
   const notice = plan.notice;
-  if (!Number.isInteger(notice.seat) || notice.seat < 1 || notice.seat > 4) return null;
+  if (!Number.isInteger(notice.seat) || notice.seat < 1 || notice.seat > MAX_CITIZENS) return null;
   if (!NOTICE_SENDERS.includes(notice.sender_persona) || !NOTICE_KINDS.includes(notice.notice_kind)) return null;
 
   const citizen = citizens.find((row) => Number(row.seat) === notice.seat);
