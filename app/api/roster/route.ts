@@ -5,6 +5,7 @@ import { createFriendComputerSupabase } from "@/lib/fc-supabase-server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const MAX_CITIZENS = 16;
 const CLEARANCES = [
   "INFRARED",
   "RED",
@@ -62,15 +63,15 @@ export async function POST(request: NextRequest) {
   const supabase = createFriendComputerSupabase();
 
   if (action === "list") {
-    const { data, error } = await supabase.rpc("fc_get_roster", {
+    const { data, error } = await supabase.rpc("fc_get_roster_private", {
       p_room: room,
       p_gm_key: providedKey,
     });
     if (error) {
-      console.error("Friend Computer roster read failed", error.message);
+      console.error("Friend Computer private roster read failed", error.message);
       return NextResponse.json({ error: "Unable to load citizen directory." }, { status: 502 });
     }
-    return NextResponse.json({ citizens: data ?? [] }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ citizens: data ?? [], maxCitizens: MAX_CITIZENS }, { headers: { "Cache-Control": "no-store" } });
   }
 
   if (action === "upsert") {
@@ -81,6 +82,7 @@ export async function POST(request: NextRequest) {
     const clearance = cleanText(citizen.clearance, 24).toUpperCase();
     const cloneNumber = integer(citizen.cloneNumber, 1);
     const email = cleanText(citizen.email, 254);
+    const secretSociety = cleanText(citizen.secretSociety, 100);
     const serviceGroup = cleanText(citizen.serviceGroup, 80);
     const firm = cleanText(citizen.firm, 100);
     const mbd = cleanText(citizen.mbd, 100);
@@ -88,11 +90,11 @@ export async function POST(request: NextRequest) {
     const officialCommendations = bounded(citizen.officialCommendations, 0);
     const officialReprimands = bounded(citizen.officialReprimands, 0);
 
-    if (seat < 1 || seat > 4 || !citizenId || !displayName || !CLEARANCES.includes(clearance as (typeof CLEARANCES)[number])) {
+    if (seat < 1 || seat > MAX_CITIZENS || !citizenId || !displayName || !CLEARANCES.includes(clearance as (typeof CLEARANCES)[number])) {
       return NextResponse.json({ error: "Citizen record is incomplete or invalid." }, { status: 400 });
     }
 
-    const { data, error } = await supabase.rpc("fc_upsert_citizen", {
+    const { data, error } = await supabase.rpc("fc_upsert_citizen_private", {
       p_room: room,
       p_gm_key: providedKey,
       p_seat: seat,
@@ -101,6 +103,7 @@ export async function POST(request: NextRequest) {
       p_clearance: clearance,
       p_clone_number: Math.max(1, Math.min(99, cloneNumber)),
       p_email: email || null,
+      p_secret_society: secretSociety,
       p_service_group: serviceGroup,
       p_firm: firm,
       p_mbd: mbd,
@@ -109,14 +112,31 @@ export async function POST(request: NextRequest) {
       p_official_reprimands: officialReprimands,
     });
     if (error || data !== true) {
-      console.error("Friend Computer roster write failed", error?.message ?? "rpc rejected");
+      console.error("Friend Computer private roster write failed", error?.message ?? "rpc rejected");
       return NextResponse.json({ error: "Unable to save citizen record." }, { status: 502 });
+    }
+    return NextResponse.json({ ok: true });
+  }
+
+  if (action === "delete") {
+    const seat = integer(body.seat);
+    if (seat < 5 || seat > MAX_CITIZENS) {
+      return NextResponse.json({ error: "Only added Citizens can be removed from the dynamic roster." }, { status: 400 });
+    }
+    const { data, error } = await supabase.rpc("fc_delete_citizen", {
+      p_room: room,
+      p_gm_key: providedKey,
+      p_seat: seat,
+    });
+    if (error || data !== true) {
+      return NextResponse.json({ error: "Unable to remove citizen." }, { status: 502 });
     }
     return NextResponse.json({ ok: true });
   }
 
   if (action === "adjust_xp_status") {
     const seat = integer(body.seat);
+    if (seat < 1 || seat > MAX_CITIZENS) return NextResponse.json({ error: "Citizen seat is invalid." }, { status: 400 });
     const perversityDelta = Math.max(-99, Math.min(99, integer(body.perversityDelta)));
     const commendationDelta = Math.max(-99, Math.min(99, integer(body.commendationDelta)));
     const reprimandDelta = Math.max(-99, Math.min(99, integer(body.reprimandDelta)));
@@ -157,7 +177,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase.rpc("fc_recent_notices", {
       p_room: room,
       p_gm_key: providedKey,
-      p_limit: 20,
+      p_limit: 30,
     });
     if (error) {
       console.error("Friend Computer notice history failed", error.message);
