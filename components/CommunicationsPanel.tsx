@@ -116,6 +116,10 @@ function senderDisplay(persona: SenderPersona, citizen: Citizen) {
   return { label: SENDER_LABELS[persona], email: SENDER_EMAILS[persona] };
 }
 
+function emailLooksValid(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
 export function CommunicationsPanel({ room }: { room: string }) {
   const [gmKey, setGmKey] = useState("");
   const [citizens, setCitizens] = useState<Citizen[]>(() => [1, 2, 3, 4].map(defaultCitizen));
@@ -183,6 +187,7 @@ export function CommunicationsPanel({ room }: { room: string }) {
       setStatus(`PARANOIA XP CITIZEN DIRECTORY UNLOCKED · ${rows.length} SAVED / ${MAX_CITIZENS} MAX`);
       await loadNotices();
     } catch (reason) {
+      setUnlocked(false);
       setError(reason instanceof Error ? reason.message : "Unable to unlock citizen directory.");
     } finally {
       setBusy(false);
@@ -218,6 +223,10 @@ export function CommunicationsPanel({ room }: { room: string }) {
   };
 
   const saveCitizen = async (citizen: Citizen) => {
+    if (citizen.email.trim() && !emailLooksValid(citizen.email)) {
+      setError("Citizen email address is invalid. Enter a complete address before saving.");
+      return;
+    }
     setBusy(true);
     setError("");
     setStatus("");
@@ -265,14 +274,24 @@ export function CommunicationsPanel({ room }: { room: string }) {
   const recipient = useMemo(() => citizens.find((citizen) => citizen.seat === recipientSeat) ?? citizens[0] ?? defaultCitizen(1), [citizens, recipientSeat]);
   const sender = senderDisplay(senderPersona, recipient);
   const societyReady = senderPersona !== "secret_society" || Boolean(recipient.secretSociety.trim());
+  const recipientEmailValid = Boolean(recipient.email.trim()) && emailLooksValid(recipient.email);
 
   const sendNotice = async () => {
+    if (!recipientEmailValid) {
+      setError("Recipient email address is missing or invalid. Correct it before transmitting.");
+      return;
+    }
     setBusy(true);
     setError("");
-    setStatus("");
+    setStatus("VERIFYING RECIPIENT DIRECTORY RECORD…");
     try {
-      await authorizedFetch({ room, seat: recipientSeat, senderPersona, noticeKind, subject, body, includeResponse }, "/api/notices/send");
-      setStatus(senderPersona === "secret_society" ? `SECRET SOCIETY DIRECTIVE SENT AS ${recipient.secretSociety}` : `OFFICIAL NOTICE SENT TO ${recipient.citizenId}`);
+      // Always persist the selected Citizen immediately before sending. This
+      // prevents a browser-only email edit from looking sendable when the
+      // encrypted roster record has not actually been saved yet.
+      await authorizedFetch({ action: "upsert", room, citizen: recipient });
+      const result = await authorizedFetch({ room, seat: recipientSeat, senderPersona, noticeKind, subject, body, includeResponse }, "/api/notices/send");
+      const accepted = typeof result.emailId === "string" && result.emailId ? " · RESEND ACCEPTED" : "";
+      setStatus(senderPersona === "secret_society" ? `SECRET SOCIETY DIRECTIVE SENT AS ${recipient.secretSociety}${accepted}` : `OFFICIAL NOTICE SENT TO ${recipient.citizenId}${accepted}`);
       await loadNotices();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to send notice.");
@@ -357,13 +376,14 @@ export function CommunicationsPanel({ room }: { room: string }) {
                 <select value={senderPersona} onChange={(event) => { const next = event.target.value as SenderPersona; setSenderPersona(next); if (next === "secret_society") setIncludeResponse(false); }}><option value="friend_computer">Friend Computer</option><option value="citizen_services">Citizen Services</option><option value="internal_security">Internal Security</option><option value="happiness_office">Happiness Office</option><option value="termination_services">Termination Services</option><option value="secret_society">Citizen&apos;s Secret Society</option></select>
               </div>
               {senderPersona === "secret_society" ? <div style={{ border: "1px solid #5c5330", background: "#110f08", padding: 10, color: recipient.secretSociety ? "#d7c77d" : "#ff8d86", fontSize: 12 }}>{recipient.secretSociety ? `UNAUTHORIZED CHANNEL: ${recipient.secretSociety}` : "NO SECRET SOCIETY CONFIGURED FOR THIS CITIZEN"}</div> : null}
+              {!recipientEmailValid && recipient.email.trim() ? <div style={{ border: "1px solid #78352f", background: "#160706", padding: 10, color: "#ff8d86", fontSize: 12 }}>RECIPIENT EMAIL IS INVALID · CORRECT IT BEFORE TRANSMISSION</div> : null}
               <input value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Subject" maxLength={160} />
               <textarea value={body} onChange={(event) => setBody(event.target.value)} placeholder="Message body" style={{ minHeight: 150 }} maxLength={4000} />
               <div className="button-row" style={{ marginTop: 0 }}>
                 <button type="button" disabled={senderPersona === "secret_society"} className={includeResponse && senderPersona !== "secret_society" ? "is-active" : ""} onClick={() => setIncludeResponse((value) => !value)}>ACK / DENY LINKS {senderPersona === "secret_society" ? "DISABLED" : includeResponse ? "ON" : "OFF"}</button>
-                <button type="button" className="primary-action" disabled={busy || !recipient.email || !societyReady || !subject.trim() || !body.trim()} onClick={() => void sendNotice()}>{busy ? "TRANSMITTING…" : senderPersona === "secret_society" ? "SEND SOCIETY DIRECTIVE" : "SEND OFFICIAL NOTICE"}</button>
+                <button type="button" className="primary-action" disabled={busy || !recipientEmailValid || !societyReady || !subject.trim() || !body.trim()} onClick={() => void sendNotice()}>{busy ? "TRANSMITTING…" : senderPersona === "secret_society" ? "SEND SOCIETY DIRECTIVE" : "SEND OFFICIAL NOTICE"}</button>
               </div>
-              <small style={{ color: "#6e9499" }}>From: {sender.label} &lt;{sender.email}&gt; · To: {recipient.email || "NO EMAIL ON FILE"}{senderPersona === "secret_society" ? " · society directives are deniable and contain no Alpha Complex response links" : ""}</small>
+              <small style={{ color: "#6e9499" }}>From: {sender.label} &lt;{sender.email}&gt; · To: {recipient.email || "NO EMAIL ON FILE"}{senderPersona === "secret_society" ? " · society directives are deniable and contain no Alpha Complex response links" : ""} · SEND automatically validates and saves the selected Citizen before transmission.</small>
             </div>
           </section>
         ) : null}
