@@ -38,55 +38,55 @@ function getLidGeometry(expression: Expression, intensity: number): LidGeometry 
       return {
         topLeft: 350,
         topRight: 350,
-        topCenter: 168 + i * 12,
+        topCenter: 140 + i * 15,
         bottomLeft: 350,
         bottomRight: 350,
-        bottomCenter: 528 - i * 18,
+        bottomCenter: 560 - i * 20,
       };
     case "suspicious":
       return {
         topLeft: 350,
         topRight: 350,
-        topCenter: 184 + i * 24,
+        topCenter: 145 + i * 40,
         bottomLeft: 350,
         bottomRight: 350,
-        bottomCenter: 518 - i * 18,
+        bottomCenter: 555 - i * 40,
       };
     case "angry":
       return {
         topLeft: 382,
         topRight: 318,
-        topCenter: 206 + i * 20,
+        topCenter: 170 + i * 25,
         bottomLeft: 350,
         bottomRight: 350,
-        bottomCenter: 512 - i * 18,
+        bottomCenter: 540 - i * 20,
       };
     case "terrified":
       return {
         topLeft: 350,
         topRight: 350,
-        topCenter: 140,
+        topCenter: 115,
         bottomLeft: 350,
         bottomRight: 350,
-        bottomCenter: 558,
+        bottomCenter: 585,
       };
     case "drugged":
       return {
         topLeft: 350,
         topRight: 350,
-        topCenter: 232,
+        topCenter: 220,
         bottomLeft: 350,
         bottomRight: 350,
-        bottomCenter: 474,
+        bottomCenter: 485,
       };
     default:
       return {
         topLeft: 350,
         topRight: 350,
-        topCenter: 158,
+        topCenter: 125,
         bottomLeft: 350,
         bottomRight: 350,
-        bottomCenter: 542,
+        bottomCenter: 575,
       };
   }
 }
@@ -102,9 +102,15 @@ function getLids(expression: Expression, intensity: number, blinkAmount: number)
   const bottomRight = lerp(base.bottomRight, 350, b);
   const bottomCenter = lerp(base.bottomCenter, 350, b);
 
+  // The geometry values above describe the visible midpoint of each lid.
+  // Convert that midpoint into the quadratic Bezier control point so the
+  // rendered curve actually passes through the intended center position.
+  const topControl = 2 * topCenter - (topLeft + topRight) / 2;
+  const bottomControl = 2 * bottomCenter - (bottomLeft + bottomRight) / 2;
+
   return {
-    top: `M130 50 H870 V${topRight} Q500 ${topCenter} 130 ${topLeft} Z`,
-    bottom: `M130 ${bottomLeft} Q500 ${bottomCenter} 870 ${bottomRight} V650 H130 Z`,
+    top: `M130 50 H870 V${topRight} Q500 ${topControl} 130 ${topLeft} Z`,
+    bottom: `M130 ${bottomLeft} Q500 ${bottomControl} 870 ${bottomRight} V650 H130 Z`,
   };
 }
 
