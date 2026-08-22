@@ -38,6 +38,10 @@ function bounded(value: unknown, fallback: number, min = 0, max = 999) {
   return Math.max(min, Math.min(max, integer(value, fallback)));
 }
 
+function emailLooksValid(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
 export async function POST(request: NextRequest) {
   const gmKey = process.env.FRIEND_COMPUTER_GM_KEY;
   if (!gmKey) {
@@ -61,6 +65,24 @@ export async function POST(request: NextRequest) {
   if (!room) return NextResponse.json({ error: "Room is required." }, { status: 400 });
 
   const supabase = createFriendComputerSupabase();
+
+  // Do this explicitly before any roster RPC. Several private RPCs historically
+  // returned an empty result when the room key did not match, which made the UI
+  // look successfully unlocked even though subsequent writes would fail.
+  const { data: sessionAccepted, error: sessionError } = await supabase.rpc("fc_ensure_session", {
+    p_room: room,
+    p_gm_key: providedKey,
+  });
+  if (sessionError) {
+    console.error("Friend Computer session authorization failed", sessionError.message);
+    return NextResponse.json({ error: "Unable to authorize this Alpha Complex room." }, { status: 502 });
+  }
+  if (sessionAccepted !== true) {
+    return NextResponse.json(
+      { error: "This room is bound to a different GM passphrase. Reopen the current Join Menu or use the passphrase that created this room." },
+      { status: 409 },
+    );
+  }
 
   if (action === "list") {
     const { data, error } = await supabase.rpc("fc_get_roster_private", {
@@ -93,6 +115,9 @@ export async function POST(request: NextRequest) {
     if (seat < 1 || seat > MAX_CITIZENS || !citizenId || !displayName || !CLEARANCES.includes(clearance as (typeof CLEARANCES)[number])) {
       return NextResponse.json({ error: "Citizen record is incomplete or invalid." }, { status: 400 });
     }
+    if (email && !emailLooksValid(email)) {
+      return NextResponse.json({ error: "Citizen email address is invalid. Enter a complete address before saving." }, { status: 400 });
+    }
 
     const { data, error } = await supabase.rpc("fc_upsert_citizen_private", {
       p_room: room,
@@ -113,7 +138,7 @@ export async function POST(request: NextRequest) {
     });
     if (error || data !== true) {
       console.error("Friend Computer private roster write failed", error?.message ?? "rpc rejected");
-      return NextResponse.json({ error: "Unable to save citizen record." }, { status: 502 });
+      return NextResponse.json({ error: "Unable to save citizen record. The database rejected the record after validation." }, { status: 502 });
     }
     return NextResponse.json({ ok: true });
   }
