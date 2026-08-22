@@ -25,7 +25,7 @@ const expressionLabels: Record<Expression, string> = {
 
 export function ControlPanel({ room }: { room: string }) {
   const busRef = useRef<CommandBus | null>(null);
-  const [transport, setTransport] = useState<CommandBus["transport"]>("none");
+  const [transport, setTransport] = useState<CommandBus["transport"]>("connecting");
   const [speech, setSpeech] = useState("");
   const [status, setStatus] = useState("");
   const [patrol, setPatrol] = useState(false);
@@ -52,9 +52,8 @@ export function ControlPanel({ room }: { room: string }) {
   }, [playerNames]);
 
   useEffect(() => {
-    const bus = createCommandBus(room);
+    const bus = createCommandBus(room, undefined, setTransport);
     busRef.current = bus;
-    setTransport(bus.transport);
     return () => {
       bus.close();
       busRef.current = null;
@@ -98,7 +97,16 @@ export function ControlPanel({ room }: { room: string }) {
     return () => window.removeEventListener("keydown", handler);
   }, [send]);
 
-  const transportLabel = transport === "broadcast" ? "BROADCAST" : transport === "storage" ? "STORAGE FALLBACK" : "NO LOCAL BUS";
+  const transportLabel =
+    transport === "realtime"
+      ? "SUPABASE REALTIME + LOCAL FALLBACK"
+      : transport === "connecting"
+        ? "CONNECTING TO REALTIME"
+        : transport === "broadcast"
+          ? "LOCAL BROADCAST FALLBACK"
+          : transport === "storage"
+            ? "LOCAL STORAGE FALLBACK"
+            : "NO COMMAND BUS";
 
   return (
     <main className="control-shell">
