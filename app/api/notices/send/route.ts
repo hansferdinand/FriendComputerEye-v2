@@ -6,6 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const PUBLIC_ORIGIN = process.env.FRIEND_COMPUTER_PUBLIC_ORIGIN ?? "https://www.alphacomplex.space";
+const MAX_CITIZENS = 16;
 
 const SENDERS = {
   friend_computer: { label: "Friend Computer", email: "friendcomputer@alphacomplex.space" },
@@ -15,7 +16,8 @@ const SENDERS = {
   termination_services: { label: "Termination Services", email: "termination-services@alphacomplex.space" },
 } as const;
 
-type SenderKey = keyof typeof SENDERS;
+type OfficialSenderKey = keyof typeof SENDERS;
+type SenderKey = OfficialSenderKey | "secret_society";
 
 type CitizenRow = {
   seat: number;
@@ -24,6 +26,7 @@ type CitizenRow = {
   clearance: string;
   clone_number: number;
   email: string | null;
+  secret_society: string | null;
 };
 
 function secureMatch(provided: string, expected: string) {
@@ -47,14 +50,29 @@ function escapeHtml(value: string) {
   })[char] ?? char);
 }
 
-function paragraphHtml(body: string) {
+function paragraphHtml(body: string, color = "#d8f6f8") {
   return body
     .split(/\n{2,}/)
-    .map((paragraph) => `<p style="font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#d8f6f8;margin-top:0;margin-bottom:18px;">${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`)
+    .map((paragraph) => `<p style="font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:${color};margin-top:0;margin-bottom:18px;">${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`)
     .join("");
 }
 
-function noticeHtml(input: {
+function societySlug(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 32) || "classified-society";
+}
+
+function responseButtons(acknowledgeUrl?: string, denyUrl?: string) {
+  return acknowledgeUrl && denyUrl
+    ? `<table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation"><tr><td style="padding-top:10px;padding-bottom:6px;"><table cellpadding="0" cellspacing="0" border="0" role="presentation"><tr><td bgcolor="#48f6ff" style="background-color:#48f6ff;padding-top:12px;padding-right:18px;padding-bottom:12px;padding-left:18px;"><a href="${escapeHtml(acknowledgeUrl)}" style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:18px;color:#001315;text-decoration:none;font-weight:bold;">ACKNOWLEDGE</a></td><td style="width:10px;"></td><td bgcolor="#40171a" style="background-color:#40171a;padding-top:12px;padding-right:18px;padding-bottom:12px;padding-left:18px;"><a href="${escapeHtml(denyUrl)}" style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:18px;color:#ffb4ae;text-decoration:none;font-weight:bold;">DENY</a></td></tr></table></td></tr></table>`
+    : "";
+}
+
+function officialNoticeHtml(input: {
   citizen: CitizenRow;
   senderLabel: string;
   subject: string;
@@ -63,19 +81,20 @@ function noticeHtml(input: {
   denyUrl?: string;
 }) {
   const { citizen, senderLabel, subject, body, acknowledgeUrl, denyUrl } = input;
-  const buttons = acknowledgeUrl && denyUrl
-    ? `<table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation"><tr><td style="padding-top:10px;padding-bottom:6px;"><table cellpadding="0" cellspacing="0" border="0" role="presentation"><tr><td bgcolor="#48f6ff" style="background-color:#48f6ff;padding-top:12px;padding-right:18px;padding-bottom:12px;padding-left:18px;"><a href="${escapeHtml(acknowledgeUrl)}" style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:18px;color:#001315;text-decoration:none;font-weight:bold;">ACKNOWLEDGE</a></td><td style="width:10px;"></td><td bgcolor="#40171a" style="background-color:#40171a;padding-top:12px;padding-right:18px;padding-bottom:12px;padding-left:18px;"><a href="${escapeHtml(denyUrl)}" style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:18px;color:#ffb4ae;text-decoration:none;font-weight:bold;">DENY</a></td></tr></table></td></tr></table>`
-    : "";
-
   return `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta http-equiv="X-UA-Compatible" content="IE=edge"><title>${escapeHtml(subject)}</title></head>
 <body style="margin:0;padding:0;background-color:#020405;">
 <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation"><tr><td align="center" bgcolor="#020405" style="background-color:#020405;padding-top:28px;padding-right:14px;padding-bottom:28px;padding-left:14px;">
 <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="max-width:600px;border-collapse:collapse;border:1px solid #27646a;background-color:#071214;">
 <tr><td bgcolor="#0b2427" style="background-color:#0b2427;padding-top:18px;padding-right:22px;padding-bottom:18px;padding-left:22px;border-bottom:1px solid #27646a;"><p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:16px;color:#75cbd1;margin-top:0;margin-bottom:5px;letter-spacing:1px;">ALPHA COMPLEX OFFICIAL COMMUNICATION</p><p style="font-family:Arial,Helvetica,sans-serif;font-size:24px;line-height:30px;color:#e8feff;margin-top:0;margin-bottom:0;font-weight:bold;">${escapeHtml(subject)}</p></td></tr>
-<tr><td style="padding-top:22px;padding-right:22px;padding-bottom:8px;padding-left:22px;"><p style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#8fbfc3;margin-top:0;margin-bottom:14px;">RECIPIENT: <strong style="color:#d8f6f8;">${escapeHtml(citizen.citizen_id)}</strong><br>CLEARANCE: ${escapeHtml(citizen.clearance)} · CLONE ${citizen.clone_number}<br>ISSUING AUTHORITY: ${escapeHtml(senderLabel)}</p>${paragraphHtml(body)}${buttons}</td></tr>
+<tr><td style="padding-top:22px;padding-right:22px;padding-bottom:8px;padding-left:22px;"><p style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#8fbfc3;margin-top:0;margin-bottom:14px;">RECIPIENT: <strong style="color:#d8f6f8;">${escapeHtml(citizen.citizen_id)}</strong><br>CLEARANCE: ${escapeHtml(citizen.clearance)} · CLONE ${citizen.clone_number}<br>ISSUING AUTHORITY: ${escapeHtml(senderLabel)}</p>${paragraphHtml(body)}${responseButtons(acknowledgeUrl, denyUrl)}</td></tr>
 <tr><td bgcolor="#041013" style="background-color:#041013;padding-top:14px;padding-right:22px;padding-bottom:14px;padding-left:22px;border-top:1px solid #1e4347;"><p style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;color:#6e9499;margin-top:0;margin-bottom:0;">This communication is intended for the designated Citizen only. Unauthorized comprehension may exceed your security clearance. Happiness is mandatory.</p></td></tr>
 </table></td></tr></table></body></html>`;
+}
+
+function societyNoticeHtml(input: { citizen: CitizenRow; society: string; subject: string; body: string }) {
+  const { citizen, society, subject, body } = input;
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(subject)}</title></head><body style="margin:0;background:#050505;color:#f2efe4"><table width="100%" cellpadding="0" cellspacing="0" role="presentation"><tr><td align="center" style="padding:28px 14px"><table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;border:1px solid #6b5f34;background:#11100c"><tr><td style="padding:18px 22px;border-bottom:1px solid #6b5f34;background:#1b180e"><p style="font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:1.4px;color:#c7b76b;margin:0 0 6px">UNAUTHORIZED ENCRYPTED CHANNEL</p><p style="font-family:Arial,Helvetica,sans-serif;font-size:24px;line-height:30px;color:#fff8cf;margin:0;font-weight:bold">${escapeHtml(subject)}</p></td></tr><tr><td style="padding:22px"><p style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#b7ad87;margin-top:0;margin-bottom:16px">TO: <strong style="color:#f7efca">${escapeHtml(citizen.citizen_id)}</strong><br>SOURCE: ${escapeHtml(society)}<br>CHANNEL STATUS: DENIABLE</p>${paragraphHtml(body, "#eee8cd")}</td></tr><tr><td style="padding:14px 22px;border-top:1px solid #4d472d;background:#0b0a07"><p style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:17px;color:#82795b;margin:0">Delete after reading. If deletion is impossible, deny reading. If denial is impossible, blame Communications & Recording.</p></td></tr></table></td></tr></table></body></html>`;
 }
 
 export async function POST(request: NextRequest) {
@@ -100,14 +119,13 @@ export async function POST(request: NextRequest) {
   const noticeKind = cleanText(body.noticeKind, 48) || "official_notice";
   const subject = cleanText(body.subject, 160).replace(/[\n\t]+/g, " ");
   const messageBody = cleanText(body.body, 4000);
-  const includeResponse = body.includeResponse !== false;
 
-  if (!room || !Number.isInteger(seat) || seat < 1 || seat > 4 || !subject || !messageBody || !(senderPersona in SENDERS)) {
+  if (!room || !Number.isInteger(seat) || seat < 1 || seat > MAX_CITIZENS || !subject || !messageBody || (!(senderPersona in SENDERS) && senderPersona !== "secret_society")) {
     return NextResponse.json({ error: "Notice is incomplete or invalid." }, { status: 400 });
   }
 
   const supabase = createFriendComputerSupabase();
-  const { data: rosterData, error: rosterError } = await supabase.rpc("fc_get_roster", {
+  const { data: rosterData, error: rosterError } = await supabase.rpc("fc_get_roster_private", {
     p_room: room,
     p_gm_key: providedKey,
   });
@@ -120,7 +138,16 @@ export async function POST(request: NextRequest) {
   if (!citizen) return NextResponse.json({ error: "That citizen is not in the directory." }, { status: 404 });
   if (!citizen.email) return NextResponse.json({ error: "That citizen has no email address on file." }, { status: 400 });
 
-  const sender = SENDERS[senderPersona];
+  const isSociety = senderPersona === "secret_society";
+  const society = cleanText(citizen.secret_society, 100);
+  if (isSociety && !society) return NextResponse.json({ error: "That citizen has no secret society configured." }, { status: 400 });
+
+  const sender = isSociety
+    ? { label: society, email: `society-${societySlug(society)}@alphacomplex.space`, ledger: `society:${societySlug(society)}` }
+    : { ...SENDERS[senderPersona as OfficialSenderKey], ledger: senderPersona };
+
+  // Secret-society messages are deliberately deniable and never link back to the Alpha Complex response terminal.
+  const includeResponse = !isSociety && body.includeResponse !== false;
   const token = includeResponse ? randomBytes(24).toString("base64url") : null;
   const acknowledgeUrl = token ? `${PUBLIC_ORIGIN}/notice/${encodeURIComponent(token)}/acknowledge` : undefined;
   const denyUrl = token ? `${PUBLIC_ORIGIN}/notice/${encodeURIComponent(token)}/deny` : undefined;
@@ -132,7 +159,7 @@ export async function POST(request: NextRequest) {
       p_seat: seat,
       p_token: token,
       p_notice_kind: noticeKind,
-      p_sender_persona: senderPersona,
+      p_sender_persona: sender.ledger,
       p_subject: subject,
     });
     if (registerError || registered !== true) {
@@ -141,10 +168,13 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const textResponse = token
-    ? `\n\nACKNOWLEDGE: ${acknowledgeUrl}\nDENY: ${denyUrl}`
-    : "";
-  const text = `ALPHA COMPLEX OFFICIAL COMMUNICATION\n\n${subject}\n\nRecipient: ${citizen.citizen_id}\nClearance: ${citizen.clearance} · Clone ${citizen.clone_number}\nIssuing authority: ${sender.label}\n\n${messageBody}${textResponse}\n\nHappiness is mandatory.`;
+  const text = isSociety
+    ? `UNAUTHORIZED ENCRYPTED CHANNEL\n\n${subject}\n\nTo: ${citizen.citizen_id}\nSource: ${society}\n\n${messageBody}\n\nDelete after reading. If deletion is impossible, deny reading.`
+    : `ALPHA COMPLEX OFFICIAL COMMUNICATION\n\n${subject}\n\nRecipient: ${citizen.citizen_id}\nClearance: ${citizen.clearance} · Clone ${citizen.clone_number}\nIssuing authority: ${sender.label}\n\n${messageBody}${token ? `\n\nACKNOWLEDGE: ${acknowledgeUrl}\nDENY: ${denyUrl}` : ""}\n\nHappiness is mandatory.`;
+
+  const html = isSociety
+    ? societyNoticeHtml({ citizen, society, subject, body: messageBody })
+    : officialNoticeHtml({ citizen, senderLabel: sender.label, subject, body: messageBody, acknowledgeUrl, denyUrl });
 
   try {
     const upstream = await fetch("https://api.resend.com/emails", {
@@ -158,7 +188,7 @@ export async function POST(request: NextRequest) {
         to: [citizen.email],
         subject,
         text,
-        html: noticeHtml({ citizen, senderLabel: sender.label, subject, body: messageBody, acknowledgeUrl, denyUrl }),
+        html,
         tags: [
           { name: "system", value: "friend-computer" },
           { name: "notice_kind", value: noticeKind.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 48) || "official_notice" },
@@ -177,7 +207,7 @@ export async function POST(request: NextRequest) {
     }
 
     const data = (await upstream.json()) as { id?: string };
-    return NextResponse.json({ ok: true, emailId: data.id ?? null });
+    return NextResponse.json({ ok: true, emailId: data.id ?? null, senderLabel: sender.label });
   } catch (error) {
     console.error("Alpha Complex mail delivery failed", error instanceof Error ? error.message : "unknown error");
     if (token) {
