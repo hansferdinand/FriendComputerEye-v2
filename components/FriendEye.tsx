@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Expression } from "@/lib/friend-computer";
 
 type Props = {
@@ -13,45 +13,125 @@ type Props = {
   visible: boolean;
 };
 
+type LidGeometry = {
+  topLeft: number;
+  topRight: number;
+  topCenter: number;
+  bottomLeft: number;
+  bottomRight: number;
+  bottomCenter: number;
+};
+
 type LidShape = {
   top: string;
   bottom: string;
 };
 
-function getLids(expression: Expression, intensity: number): LidShape {
-  const i = Math.max(0, Math.min(1, intensity));
+const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+const lerp = (from: number, to: number, amount: number) => from + (to - from) * amount;
+
+function getLidGeometry(expression: Expression, intensity: number): LidGeometry {
+  const i = clamp01(intensity);
+
   switch (expression) {
     case "happy":
       return {
-        top: `M130 50 H870 V350 Q500 ${205 + i * 20} 130 350 Z`,
-        bottom: `M130 350 Q500 ${515 - i * 25} 870 350 V650 H130 Z`,
+        topLeft: 350,
+        topRight: 350,
+        topCenter: 168 + i * 12,
+        bottomLeft: 350,
+        bottomRight: 350,
+        bottomCenter: 528 - i * 18,
       };
     case "suspicious":
       return {
-        top: `M130 50 H870 V350 Q500 ${255 + i * 38} 130 350 Z`,
-        bottom: `M130 350 Q500 ${455 - i * 30} 870 350 V650 H130 Z`,
+        topLeft: 350,
+        topRight: 350,
+        topCenter: 184 + i * 24,
+        bottomLeft: 350,
+        bottomRight: 350,
+        bottomCenter: 518 - i * 18,
       };
     case "angry":
       return {
-        top: `M130 50 H870 V300 Q505 ${235 + i * 25} 130 365 Z`,
-        bottom: `M130 350 Q500 ${505 - i * 18} 870 350 V650 H130 Z`,
+        topLeft: 382,
+        topRight: 318,
+        topCenter: 206 + i * 20,
+        bottomLeft: 350,
+        bottomRight: 350,
+        bottomCenter: 512 - i * 18,
       };
     case "terrified":
       return {
-        top: "M130 50 H870 V350 Q500 155 130 350 Z",
-        bottom: "M130 350 Q500 550 870 350 V650 H130 Z",
+        topLeft: 350,
+        topRight: 350,
+        topCenter: 140,
+        bottomLeft: 350,
+        bottomRight: 350,
+        bottomCenter: 558,
       };
     case "drugged":
       return {
-        top: "M130 50 H870 V350 Q500 275 130 350 Z",
-        bottom: "M130 350 Q500 490 870 350 V650 H130 Z",
+        topLeft: 350,
+        topRight: 350,
+        topCenter: 232,
+        bottomLeft: 350,
+        bottomRight: 350,
+        bottomCenter: 474,
       };
     default:
       return {
-        top: "M130 50 H870 V350 Q500 205 130 350 Z",
-        bottom: "M130 350 Q500 515 870 350 V650 H130 Z",
+        topLeft: 350,
+        topRight: 350,
+        topCenter: 158,
+        bottomLeft: 350,
+        bottomRight: 350,
+        bottomCenter: 542,
       };
   }
+}
+
+function getLids(expression: Expression, intensity: number, blinkAmount: number): LidShape {
+  const base = getLidGeometry(expression, intensity);
+  const b = clamp01(blinkAmount);
+
+  const topLeft = lerp(base.topLeft, 350, b);
+  const topRight = lerp(base.topRight, 350, b);
+  const topCenter = lerp(base.topCenter, 350, b);
+  const bottomLeft = lerp(base.bottomLeft, 350, b);
+  const bottomRight = lerp(base.bottomRight, 350, b);
+  const bottomCenter = lerp(base.bottomCenter, 350, b);
+
+  return {
+    top: `M130 50 H870 V${topRight} Q500 ${topCenter} 130 ${topLeft} Z`,
+    bottom: `M130 ${bottomLeft} Q500 ${bottomCenter} 870 ${bottomRight} V650 H130 Z`,
+  };
+}
+
+function easeInOutSine(value: number) {
+  return -(Math.cos(Math.PI * clamp01(value)) - 1) / 2;
+}
+
+function blinkAmountAt(elapsed: number, count: number) {
+  const closeMs = 62;
+  const openMs = 92;
+  const pauseMs = 105;
+  const cycleMs = closeMs + openMs + pauseMs;
+  const totalMs = count === 2 ? cycleMs + closeMs + openMs : closeMs + openMs;
+
+  if (elapsed >= totalMs) return { amount: 0, done: true };
+
+  const cycle = count === 2 && elapsed >= cycleMs ? elapsed - cycleMs : elapsed;
+  if (cycle < closeMs) {
+    return { amount: easeInOutSine(cycle / closeMs), done: false };
+  }
+  if (cycle < closeMs + openMs) {
+    return {
+      amount: 1 - easeInOutSine((cycle - closeMs) / openMs),
+      done: false,
+    };
+  }
+  return { amount: 0, done: false };
 }
 
 export function FriendEye({
@@ -65,7 +145,12 @@ export function FriendEye({
 }: Props) {
   const [micro, setMicro] = useState({ x: 0, y: 0 });
   const [pupilBreath, setPupilBreath] = useState(1);
-  const lids = useMemo(() => getLids(expression, intensity), [expression, intensity]);
+  const [blinkAmount, setBlinkAmount] = useState(0);
+  const previousDoubleBlink = useRef(doubleBlinkNonce);
+  const lids = useMemo(
+    () => getLids(expression, intensity, blinkAmount),
+    [expression, intensity, blinkAmount],
+  );
 
   useEffect(() => {
     let timer = window.setTimeout(function tick() {
@@ -86,6 +171,28 @@ export function FriendEye({
     return () => window.clearInterval(timer);
   }, [expression]);
 
+  useEffect(() => {
+    if (!blinkNonce && !doubleBlinkNonce) return;
+
+    const isDouble = doubleBlinkNonce !== previousDoubleBlink.current;
+    previousDoubleBlink.current = doubleBlinkNonce;
+    const count = isDouble ? 2 : 1;
+    const startedAt = performance.now();
+    let frameId = 0;
+
+    const animate = (now: number) => {
+      const frame = blinkAmountAt(now - startedAt, count);
+      setBlinkAmount(frame.amount);
+      if (!frame.done) frameId = window.requestAnimationFrame(animate);
+    };
+
+    frameId = window.requestAnimationFrame(animate);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      setBlinkAmount(0);
+    };
+  }, [blinkNonce, doubleBlinkNonce]);
+
   const irisX = 500 + gazeX * 155 + micro.x;
   const irisY = 350 + gazeY * 92 + micro.y;
   const irisCompression = 1 - Math.min(Math.abs(gazeX) * 0.13, 0.13);
@@ -100,7 +207,7 @@ export function FriendEye({
       <svg viewBox="0 0 1000 700" role="img" aria-hidden="true">
         <defs>
           <clipPath id="eye-clip">
-            <ellipse cx="500" cy="350" rx="335" ry="225" />
+            <ellipse cx="500" cy="350" rx="352" ry="238" />
           </clipPath>
           <radialGradient id="sclera" cx="48%" cy="43%" r="64%">
             <stop offset="0%" stopColor="#fff" />
@@ -123,32 +230,24 @@ export function FriendEye({
         </defs>
 
         <g clipPath="url(#eye-clip)">
-          <ellipse cx="500" cy="350" rx="335" ry="225" fill="url(#sclera)" />
+          <ellipse cx="500" cy="350" rx="352" ry="238" fill="url(#sclera)" />
           <g
             className="iris-rig"
             style={{
               transform: `translate(${irisX - 500}px, ${irisY - 350}px) scaleX(${irisCompression})`,
             }}
           >
-            <circle cx="500" cy="350" r="137" fill="#310000" opacity="0.45" filter="url(#eye-glow)" />
-            <circle cx="500" cy="350" r="124" fill="url(#iris)" stroke="#ff4d35" strokeWidth="5" />
-            <circle
-              cx="500"
-              cy="350"
-              r={54 * pupilScale}
-              fill="#020000"
-              className="pupil"
-            />
-            <ellipse cx="460" cy="306" rx="25" ry="15" fill="white" opacity="0.9" />
-            <ellipse cx="480" cy="324" rx="9" ry="6" fill="white" opacity="0.55" />
+            <circle cx="500" cy="350" r="150" fill="#310000" opacity="0.45" filter="url(#eye-glow)" />
+            <circle cx="500" cy="350" r="136" fill="url(#iris)" stroke="#ff4d35" strokeWidth="5" />
+            <circle cx="500" cy="350" r={56 * pupilScale} fill="#020000" className="pupil" />
+            <ellipse cx="456" cy="302" rx="27" ry="16" fill="white" opacity="0.9" />
+            <ellipse cx="478" cy="322" rx="10" ry="7" fill="white" opacity="0.55" />
           </g>
           <path className="eyelid eyelid--top" d={lids.top} />
           <path className="eyelid eyelid--bottom" d={lids.bottom} />
         </g>
-        <ellipse cx="500" cy="350" rx="337" ry="227" fill="none" stroke="#101b1c" strokeWidth="26" opacity="0.88" />
+        <ellipse cx="500" cy="350" rx="354" ry="240" fill="none" stroke="#101b1c" strokeWidth="26" opacity="0.88" />
       </svg>
-      <div key={`blink-${blinkNonce}`} className={blinkNonce ? "blink blink--single" : "blink"} />
-      <div key={`double-${doubleBlinkNonce}`} className={doubleBlinkNonce ? "blink blink--double" : "blink"} />
     </div>
   );
 }
