@@ -22,6 +22,7 @@ Milestone 1 is deliberately **offline-first**. Once the page is loaded, the actu
 - Direct keyboard emergency controls on the display
 - `BroadcastChannel` command bus with a `localStorage` cross-tab fallback
 - Player labels persisted locally in the GM browser
+- GitHub Actions verification for dependency install, TypeScript, and the production Next.js build
 
 ## Run locally
 
