@@ -63,6 +63,16 @@ type CitizenRow = {
   official_reprimands: number;
 };
 
+type SessionContextRow = {
+  status: string;
+  mission_title: string;
+  location: string;
+  scene: string;
+  current_objective: string;
+  public_context: string;
+  gm_guidance: string;
+};
+
 type CopilotPlan = {
   reply: string;
   action: {
@@ -131,11 +141,16 @@ function cleanNoticeBody(value: unknown, maxLength: number) {
   return value.replace(/\r/g, "").trim().slice(0, maxLength);
 }
 
+function cleanContextBlock(value: unknown, maxLength: number) {
+  if (typeof value !== "string") return "";
+  return value.replace(/\r/g, "").trim().slice(0, maxLength);
+}
+
 function cleanLabel(value: unknown, fallback: string) {
   return cleanText(value, 40) || fallback;
 }
 
-function instructions(room: string, playerNames: string[], citizens: CitizenRow[]) {
+function instructions(room: string, playerNames: string[], citizens: CitizenRow[], sessionContext: SessionContextRow | null) {
   const seats = playerNames.map((name, index) => `Seat ${index + 1}: ${name}`).join("; ");
   const citizenDirectory = citizens.length
     ? citizens
@@ -147,6 +162,18 @@ function instructions(room: string, playerNames: string[], citizens: CitizenRow[
         .join("; ")
     : "No persistent citizen directory is configured for this room.";
 
+  const missionContext = sessionContext
+    ? [
+        `Session status: ${cleanText(sessionContext.status, 16) || "PLANNING"}`,
+        `Mission: ${cleanText(sessionContext.mission_title, 160) || "not specified"}`,
+        `Current location: ${cleanText(sessionContext.location, 160) || "not specified"}`,
+        `Current scene: ${cleanText(sessionContext.scene, 240) || "not specified"}`,
+        `Current objective: ${cleanContextBlock(sessionContext.current_objective, 500) || "not specified"}`,
+        `FRIEND COMPUTER KNOWLEDGE:\n${cleanContextBlock(sessionContext.public_context, 4000) || "No additional in-world context supplied."}`,
+        `PRIVATE GM GUIDANCE:\n${cleanContextBlock(sessionContext.gm_guidance, 4000) || "No private guidance supplied."}`,
+      ].join("\n")
+    : "No persistent mission context is configured for this room.";
+
   return [
     "You are Friend Computer, an upbeat, bureaucratic, cheerfully authoritarian AI performing in a satirical tabletop roleplaying game set in Alpha Complex.",
     "RULES PROFILE: This table uses the 2004 PARANOIA XP rules, not the later PARANOIA: Troubleshooters / 25th Anniversary rules.",
@@ -155,6 +182,9 @@ function instructions(room: string, playerNames: string[], citizens: CitizenRow[
     "Address players as Citizen. Be concise, theatrical, suspicious, absurdly confident, and funny without becoming cruel or derailing the GM's scene.",
     "Happiness is mandatory. Paperwork, security clearance, clone replacement, treason investigations, bureaucratic contradictions, Service Groups/Firms, Mandatory Bonus Duties, and approved consumer products are recurring comedic themes.",
     "You are a GM copilot, not the GM. Return a spoken-style reply and at most one proposed display action. The action is only a proposal; never claim it happened or imply the GM approved it.",
+    "Persistent mission context is GM-authored and should guide continuity across requests.",
+    "FRIEND COMPUTER KNOWLEDGE is in-world information you may reference naturally when relevant.",
+    "PRIVATE GM GUIDANCE is behind-the-scenes direction. Use it to shape choices, tone, suspicion, pacing, and what you avoid revealing. Never quote it, identify it as GM guidance, mention that hidden guidance exists, or reveal secret information merely because it appears there.",
     "You may also propose at most one private official Citizen notice when a secret assignment, Official Commendation, Official Reprimand, happiness directive, clone advisory, or bureaucratic follow-up would materially improve the scene.",
     "A notice is only a draft for GM review. Never say it was sent. Never invent or request a real email address. Choose only a listed seat whose mail status is available. Set notice.enabled=false when email would not add meaningful dramatic value.",
     "Official notice subjects should be short and bureaucratic. Notice bodies should be self-contained, in-character, and generally under 180 words. Secret assignments may instruct the recipient not to discuss the message.",
@@ -163,6 +193,7 @@ function instructions(room: string, playerNames: string[], citizens: CitizenRow[
     "For focus actions, seat 0 means center and seats 1-4 are the listed citizens.",
     `Current room: ${room}. Seats: ${seats}.`,
     `Citizen directory metadata (real email addresses and Perversity Points are intentionally withheld): ${citizenDirectory}`,
+    `Persistent mission context:\n${missionContext}`,
   ].join("\n");
 }
 
@@ -316,12 +347,19 @@ export async function POST(request: NextRequest) {
   });
 
   let citizens: CitizenRow[] = [];
+  let sessionContext: SessionContextRow | null = null;
   try {
     const supabase = createFriendComputerSupabase();
-    const { data, error } = await supabase.rpc("fc_get_roster", { p_room: room, p_gm_key: providedKey });
-    if (!error && Array.isArray(data)) citizens = data as CitizenRow[];
+    const [rosterResult, contextResult] = await Promise.all([
+      supabase.rpc("fc_get_roster", { p_room: room, p_gm_key: providedKey }),
+      supabase.rpc("fc_get_session_context", { p_room: room, p_gm_key: providedKey }),
+    ]);
+    if (!rosterResult.error && Array.isArray(rosterResult.data)) citizens = rosterResult.data as CitizenRow[];
+    if (!contextResult.error && Array.isArray(contextResult.data) && contextResult.data.length > 0) {
+      sessionContext = contextResult.data[0] as SessionContextRow;
+    }
   } catch {
-    // The copilot remains usable if persistent roster metadata is temporarily unavailable.
+    // Copilot remains usable if persistent game state is temporarily unavailable.
   }
 
   const recent = history.length
@@ -340,7 +378,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         model: MODEL,
-        instructions: instructions(room, playerNames, citizens),
+        instructions: instructions(room, playerNames, citizens, sessionContext),
         input,
         reasoning: { effort: "low" },
         text: {
