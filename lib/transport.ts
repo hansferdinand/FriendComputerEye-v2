@@ -20,7 +20,17 @@ function normalizedRoomName(room: string) {
 
 export type TransportKind = "connecting" | "realtime" | "broadcast" | "storage" | "none";
 export type PresenceRole = "display" | "control";
-export type RoomPresence = { displays: number; controls: number };
+export type DisplayPresence = {
+  key: string;
+  name: string;
+  audioRole: "primary" | "visual";
+  joinedAt?: number;
+};
+export type RoomPresence = {
+  displays: number;
+  controls: number;
+  displayClients?: DisplayPresence[];
+};
 export type CommandReceipt = { id: string; receivedAt: number };
 
 type SupabaseBrowserClient = ReturnType<typeof getSupabaseClient>;
@@ -38,6 +48,7 @@ export function createCommandBus(
   onTransportChange?: (transport: TransportKind) => void,
   onPresenceChange?: (presence: RoomPresence) => void,
   onReceipt?: (receipt: CommandReceipt) => void,
+  presenceMeta?: Record<string, unknown>,
 ): CommandBus {
   const normalizedRoom = normalizedRoomName(room);
   const channelName = `${CHANNEL_PREFIX}:${normalizedRoom}`;
@@ -64,7 +75,7 @@ export function createCommandBus(
   };
 
   const emitNoPresence = () => {
-    if (!closed) onPresenceChange?.({ displays: 0, controls: 0 });
+    if (!closed) onPresenceChange?.({ displays: 0, controls: 0, displayClients: [] });
   };
 
   const remember = (id: string) => {
@@ -130,15 +141,28 @@ export function createCommandBus(
     const state = remoteChannel.presenceState();
     let displays = 0;
     let controls = 0;
+    const displayClients: DisplayPresence[] = [];
 
-    for (const entries of Object.values(state)) {
+    for (const [key, entries] of Object.entries(state)) {
       for (const entry of entries as Array<Record<string, unknown>>) {
-        if (entry.role === "display") displays += 1;
+        if (entry.role === "display") {
+          displays += 1;
+          const rawName = typeof entry.displayName === "string" ? entry.displayName.trim() : "";
+          const audioRole = entry.audioRole === "primary" ? "primary" : "visual";
+          const joinedAt = typeof entry.joinedAt === "number" ? entry.joinedAt : undefined;
+          displayClients.push({
+            key,
+            name: rawName || `DISPLAY-${key.slice(-4).toUpperCase()}`,
+            audioRole,
+            joinedAt,
+          });
+        }
         if (entry.role === "control") controls += 1;
       }
     }
 
-    onPresenceChange({ displays, controls });
+    displayClients.sort((a, b) => a.name.localeCompare(b.name));
+    onPresenceChange({ displays, controls, displayClients });
   };
 
   remoteChannel = supabase
@@ -161,7 +185,7 @@ export function createCommandBus(
       emitTransport();
 
       if (remoteConnected) {
-        void remoteChannel.track({ role, joinedAt: Date.now() });
+        void remoteChannel.track({ role, joinedAt: Date.now(), ...(presenceMeta ?? {}) });
       } else {
         emitNoPresence();
       }
