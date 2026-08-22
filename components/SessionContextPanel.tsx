@@ -120,6 +120,7 @@ export function SessionContextPanel({ room }: { room: string }) {
         </div>
         <div className="control-header-actions">
           <Link className="display-link" href={`/readiness/${encodeURIComponent(room)}`}>SHOW READINESS</Link>
+          <Link className="display-link" href={`/log/${encodeURIComponent(room)}`}>SESSION LOG</Link>
           <Link className="display-link" href={`/control/${encodeURIComponent(room)}`}>MANUAL CONTROLS</Link>
           <Link className="display-link" href={`/copilot/${encodeURIComponent(room)}`}>AI COPILOT</Link>
           <Link className="display-link" href={`/communications/${encodeURIComponent(room)}`}>COMMUNICATIONS</Link>
@@ -145,7 +146,7 @@ export function SessionContextPanel({ room }: { room: string }) {
           {statusMessage ? <div style={{ marginTop: 10, color: "#87f6fb", fontSize: 12 }}>{statusMessage}</div> : null}
           {error ? <div style={{ marginTop: 10, color: "#ff8d86", fontSize: 12 }}>{error}</div> : null}
           <small style={{ display: "block", marginTop: 10, color: "#6e9499", lineHeight: 1.45 }}>
-            Context is stored in the private Friend Computer Supabase tables and retrieved only through the GM-key-gated server API.
+            Context is stored in the private Friend Computer Supabase tables and retrieved only through the GM-key-gated server API. Use Session Log for chronological events that happen during play.
           </small>
         </section>
 
@@ -193,11 +194,11 @@ export function SessionContextPanel({ room }: { room: string }) {
                 value={context.publicContext}
                 maxLength={4000}
                 onChange={(event) => update("publicContext", event.target.value)}
-                placeholder="Facts Friend Computer may know and reference in-character: mission background, official orders, recent events, named NPCs, known equipment problems, etc."
+                placeholder="Facts Friend Computer may know and reference in-character: mission background, official orders, named NPCs, known equipment problems, etc."
                 style={{ minHeight: 150 }}
               />
               <small style={{ display: "block", marginTop: 7, color: "#6e9499", lineHeight: 1.4 }}>
-                This text is supplied to Copilot as in-world context and may be referenced directly in Friend Computer&apos;s replies. {context.publicContext.length}/4000
+                This text is supplied to Copilot as stable in-world context and may be referenced directly in Friend Computer&apos;s replies. Use Session Log for events that change during play. {context.publicContext.length}/4000
               </small>
             </section>
 
@@ -220,6 +221,7 @@ export function SessionContextPanel({ room }: { room: string }) {
                 <button type="button" className="primary-action" disabled={busy} onClick={() => void saveContext()}>
                   {busy ? "SAVING…" : "SAVE SESSION CONTEXT"}
                 </button>
+                <Link className="display-link" href={`/log/${encodeURIComponent(room)}`}>OPEN SESSION LOG</Link>
                 <Link className="display-link" href={`/copilot/${encodeURIComponent(room)}`}>OPEN COPILOT</Link>
               </div>
               <small style={{ display: "block", marginTop: 10, color: "#6e9499" }}>
