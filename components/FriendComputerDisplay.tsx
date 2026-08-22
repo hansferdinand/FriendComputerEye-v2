@@ -20,6 +20,17 @@ type Overlay =
   | { kind: "interrogation" }
   | { kind: "ad"; index: number };
 
+type ScreenWakeLockSentinel = {
+  released: boolean;
+  release: () => Promise<void>;
+};
+
+type WakeLockNavigator = Navigator & {
+  wakeLock?: {
+    request: (type: "screen") => Promise<ScreenWakeLockSentinel>;
+  };
+};
+
 function pickVoice() {
   const voices = window.speechSynthesis.getVoices();
   const preferredNames = [
@@ -54,6 +65,7 @@ export function FriendComputerDisplay({ room }: { room: string }) {
   const lastDirectedGazeRef = useRef(0);
   const startAudioRef = useRef<HTMLAudioElement | null>(null);
   const humAudioRef = useRef<HTMLAudioElement | null>(null);
+  const wakeLockRef = useRef<ScreenWakeLockSentinel | null>(null);
 
   useEffect(() => {
     const start = new Audio("/audio/crt-start.mp3");
@@ -76,8 +88,45 @@ export function FriendComputerDisplay({ room }: { room: string }) {
     return () => {
       if (overlayTimerRef.current) window.clearTimeout(overlayTimerRef.current);
       if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+      if (wakeLockRef.current && !wakeLockRef.current.released) {
+        void wakeLockRef.current.release();
+      }
+      wakeLockRef.current = null;
     };
   }, []);
+
+  const acquireWakeLock = useCallback(async () => {
+    if (document.visibilityState !== "visible") return;
+    if (wakeLockRef.current && !wakeLockRef.current.released) return;
+    const wakeLockApi = (navigator as WakeLockNavigator).wakeLock;
+    if (!wakeLockApi) return;
+
+    try {
+      wakeLockRef.current = await wakeLockApi.request("screen");
+    } catch {
+      // Wake Lock is progressive enhancement; display behavior remains unchanged.
+    }
+  }, []);
+
+  const toggleFullscreen = useCallback(async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await document.documentElement.requestFullscreen();
+      }
+    } catch {
+      // Fullscreen can be blocked by browser policy; keyboard controls remain usable.
+    }
+  }, []);
+
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (audioReady && document.visibilityState === "visible") void acquireWakeLock();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [acquireWakeLock, audioReady]);
 
   const clearOverlayLater = useCallback((delay: number) => {
     if (overlayTimerRef.current) window.clearTimeout(overlayTimerRef.current);
@@ -266,6 +315,7 @@ export function FriendComputerDisplay({ room }: { room: string }) {
       if (key === "h") applyCommand({ type: "effect", effect: "toggle-eye" });
       if (key === "l") applyCommand({ type: "effect", effect: "drugged" });
       if (key === "p") applyCommand({ type: "set-patrol", enabled: !state.patrol });
+      if (key === "f") void toggleFullscreen();
       if (event.key === " ") {
         event.preventDefault();
         applyCommand({ type: "effect", effect: "blink" });
@@ -274,7 +324,7 @@ export function FriendComputerDisplay({ room }: { room: string }) {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [applyCommand, state.patrol]);
+  }, [applyCommand, state.patrol, toggleFullscreen]);
 
   useEffect(() => {
     const onPointerMove = (event: PointerEvent) => {
@@ -292,17 +342,26 @@ export function FriendComputerDisplay({ room }: { room: string }) {
     setAudioReady(true);
     setWarmupNonce((value) => value + 1);
     setDegaussNonce((value) => value + 1);
+
+    const fullscreenPromise = document.fullscreenElement
+      ? Promise.resolve()
+      : document.documentElement.requestFullscreen().catch(() => undefined);
+    const wakeLockPromise = acquireWakeLock();
+
     const start = startAudioRef.current;
     const hum = humAudioRef.current;
-    if (!start || !hum) return;
+    if (!start || !hum) {
+      await Promise.allSettled([fullscreenPromise, wakeLockPromise]);
+      return;
+    }
     start.currentTime = 0;
     hum.currentTime = 0;
     hum.volume = 0;
-    await Promise.allSettled([start.play(), hum.play()]);
+    await Promise.allSettled([start.play(), hum.play(), fullscreenPromise, wakeLockPromise]);
     window.setTimeout(() => {
       if (humAudioRef.current) humAudioRef.current.volume = 0.14;
     }, 400);
-  }, []);
+  }, [acquireWakeLock]);
 
   const currentAd = overlay.kind === "ad" ? ADVERTISEMENTS[overlay.index] : null;
 
@@ -369,12 +428,12 @@ export function FriendComputerDisplay({ room }: { room: string }) {
       {!audioReady ? (
         <button type="button" className="audio-unlock" onClick={unlockAudio}>
           INITIALIZE FRIEND COMPUTER
-          <small>click once to enable CRT audio and begin observation</small>
+          <small>click once to enable CRT audio, fullscreen, and observation</small>
         </button>
       ) : null}
 
       <div className="display-debug">
-        ROOM {room.toUpperCase()} · 1–4 TARGET · A ANGRY · S SQUINT · I INTERROGATE · B AD · C CLONE · D DEGAUSS · G GLITCH · P PATROL · SPACE BLINK · ESC RESET
+        ROOM {room.toUpperCase()} · 1–4 TARGET · A ANGRY · S SQUINT · I INTERROGATE · B AD · C CLONE · D DEGAUSS · F FULLSCREEN · G GLITCH · P PATROL · SPACE BLINK · ESC RESET
       </div>
     </main>
   );
