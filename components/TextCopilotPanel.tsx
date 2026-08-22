@@ -35,6 +35,7 @@ export function TextCopilotPanel({ room }: { room: string }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [model, setModel] = useState("gpt-5.6-terra");
+  const [autoSpeak, setAutoSpeak] = useState(true);
 
   useEffect(() => {
     setPlayerNames(readPlayerNames());
@@ -45,6 +46,12 @@ export function TextCopilotPanel({ room }: { room: string }) {
       busRef.current = null;
     };
   }, [room]);
+
+  const sendSpeech = useCallback((text: string) => {
+    const cleaned = text.trim();
+    if (!cleaned) return;
+    busRef.current?.send({ type: "speak", text: cleaned });
+  }, []);
 
   const askComputer = useCallback(async () => {
     const text = prompt.trim();
@@ -73,12 +80,13 @@ export function TextCopilotPanel({ room }: { room: string }) {
       setHistory((current) => [...current, ...additions].slice(-8));
       setPending(data.proposal ?? null);
       setPrompt("");
+      if (autoSpeak) sendSpeech(data.reply);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to reach Friend Computer.");
     } finally {
       setLoading(false);
     }
-  }, [gmKey, history, loading, playerNames, prompt, room]);
+  }, [autoSpeak, gmKey, history, loading, playerNames, prompt, room, sendSpeech]);
 
   const approve = useCallback(() => {
     if (!pending) return;
@@ -87,7 +95,8 @@ export function TextCopilotPanel({ room }: { room: string }) {
   }, [pending]);
 
   const displayOnline = transport === "realtime" && presence.displays > 0;
-  const latestReply = [...history].reverse().find((item) => item.role === "assistant")?.text ?? "Friend Computer is awaiting a properly authorized inquiry.";
+  const latestAssistant = [...history].reverse().find((item) => item.role === "assistant") ?? null;
+  const latestReply = latestAssistant?.text ?? "Friend Computer is awaiting a properly authorized inquiry.";
 
   return (
     <main className="control-shell">
@@ -126,6 +135,24 @@ export function TextCopilotPanel({ room }: { room: string }) {
               {latestReply}
             </div>
 
+            <div className="button-row" style={{ marginTop: 0 }}>
+              <button
+                type="button"
+                className={autoSpeak ? "is-active" : ""}
+                onClick={() => setAutoSpeak((value) => !value)}
+                title="When enabled, each Friend Computer reply is spoken by the projector automatically."
+              >
+                AUTO-SPEAK REPLIES {autoSpeak ? "ON" : "OFF"}
+              </button>
+              <button
+                type="button"
+                disabled={!latestAssistant || !displayOnline}
+                onClick={() => latestAssistant && sendSpeech(latestAssistant.text)}
+              >
+                SPEAK AGAIN
+              </button>
+            </div>
+
             {pending ? (
               <div style={{ border: "1px solid #806b26", padding: 12, background: "#151207" }}>
                 <div style={{ color: "#ffe36c", fontWeight: 800, marginBottom: 8 }}>AI REQUESTS GM AUTHORIZATION</div>
@@ -153,7 +180,7 @@ export function TextCopilotPanel({ room }: { room: string }) {
             </button>
 
             <small style={{ color: "#6e9499", lineHeight: 1.45 }}>
-              Text-only safety slice. No microphone, WebRTC, or Realtime client code loads on this page. Friend Computer may propose one display action per response; nothing executes until you approve it.
+              Replies are spoken by the projector through its existing browser speech engine when auto-speak is enabled. Eye, threat, status, and effect proposals still require GM approval. No microphone or WebRTC code loads on this page.
             </small>
           </div>
         </section>
