@@ -11,7 +11,6 @@ type Props = {
   blinkNonce: number;
   doubleBlinkNonce: number;
   visible: boolean;
-  danger: boolean;
 };
 
 type LidGeometry = {
@@ -149,7 +148,6 @@ export function FriendEye({
   blinkNonce,
   doubleBlinkNonce,
   visible,
-  danger,
 }: Props) {
   const [micro, setMicro] = useState({ x: 0, y: 0 });
   const [pupilBreath, setPupilBreath] = useState(1);
@@ -206,6 +204,7 @@ export function FriendEye({
   const irisCompression = 1 - Math.min(Math.abs(gazeX) * 0.13, 0.13);
   const expressionPupil = expression === "terrified" ? 0.58 : expression === "drugged" ? 1.46 : 1;
   const pupilScale = expressionPupil * pupilBreath;
+  const danger = expression === "angry" || (expression === "suspicious" && intensity >= 0.9);
   const dangerOpacity = danger ? 1 : 0;
 
   return (
