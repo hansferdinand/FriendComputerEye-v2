@@ -16,8 +16,38 @@ const RECORDER_MIME_TYPES = [
 
 type HistoryItem = { role: "user" | "assistant"; text: string };
 type Proposal = { label: string; command: FriendCommand };
-type CopilotResponse = { reply?: string; proposal?: Proposal | null; model?: string; error?: string };
+type SenderPersona =
+  | "friend_computer"
+  | "citizen_services"
+  | "internal_security"
+  | "happiness_office"
+  | "termination_services";
+type NoticeProposal = {
+  seat: number;
+  citizenId: string;
+  displayName: string;
+  senderPersona: SenderPersona;
+  noticeKind: string;
+  subject: string;
+  body: string;
+  includeResponse: boolean;
+};
+type CopilotResponse = {
+  reply?: string;
+  proposal?: Proposal | null;
+  noticeProposal?: NoticeProposal | null;
+  model?: string;
+  error?: string;
+};
 type TranscribeResponse = { text?: string; model?: string; error?: string };
+
+const SENDER_LABELS: Record<SenderPersona, string> = {
+  friend_computer: "Friend Computer",
+  citizen_services: "Citizen Services",
+  internal_security: "Internal Security",
+  happiness_office: "Happiness Office",
+  termination_services: "Termination Services",
+};
 
 function readPlayerNames() {
   try {
@@ -65,7 +95,10 @@ export function TextCopilotPanel({ room }: { room: string }) {
   const [prompt, setPrompt] = useState("");
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [pending, setPending] = useState<Proposal | null>(null);
+  const [pendingNotice, setPendingNotice] = useState<NoticeProposal | null>(null);
   const [loading, setLoading] = useState(false);
+  const [noticeSending, setNoticeSending] = useState(false);
+  const [noticeStatus, setNoticeStatus] = useState("");
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [lastTranscript, setLastTranscript] = useState("");
@@ -108,6 +141,8 @@ export function TextCopilotPanel({ room }: { room: string }) {
     setLoading(true);
     setError("");
     setPending(null);
+    setPendingNotice(null);
+    setNoticeStatus("");
 
     try {
       const response = await fetch("/api/copilot", {
@@ -128,6 +163,7 @@ export function TextCopilotPanel({ room }: { room: string }) {
       ];
       setHistory((current) => [...current, ...additions].slice(-8));
       setPending(data.proposal ?? null);
+      setPendingNotice(data.noticeProposal ?? null);
       setPrompt("");
       if (autoSpeak) sendSpeech(data.reply);
       return true;
@@ -142,6 +178,39 @@ export function TextCopilotPanel({ room }: { room: string }) {
   const askComputer = useCallback(async () => {
     await submitPrompt(prompt);
   }, [prompt, submitPrompt]);
+
+  const sendNotice = useCallback(async () => {
+    if (!pendingNotice || noticeSending || !gmKey.trim()) return;
+    setNoticeSending(true);
+    setNoticeStatus("");
+    setError("");
+    try {
+      const response = await fetch("/api/notices/send", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-friend-computer-gm-key": gmKey,
+        },
+        body: JSON.stringify({
+          room,
+          seat: pendingNotice.seat,
+          senderPersona: pendingNotice.senderPersona,
+          noticeKind: pendingNotice.noticeKind,
+          subject: pendingNotice.subject,
+          body: pendingNotice.body,
+          includeResponse: pendingNotice.includeResponse,
+        }),
+      });
+      const data = (await response.json()) as { ok?: boolean; error?: string };
+      if (!response.ok || !data.ok) throw new Error(data.error || "Alpha Complex refused to deliver the notice.");
+      setNoticeStatus(`NOTICE SENT TO ${pendingNotice.citizenId}`);
+      setPendingNotice(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to send the official notice.");
+    } finally {
+      setNoticeSending(false);
+    }
+  }, [gmKey, noticeSending, pendingNotice, room]);
 
   const transcribeRecording = useCallback(async (blob: Blob, mimeType: string) => {
     if (!blob.size || !gmKey.trim()) return;
@@ -310,6 +379,7 @@ export function TextCopilotPanel({ room }: { room: string }) {
         </div>
         <div className="control-header-actions">
           <Link className="display-link" href={`/control/${encodeURIComponent(room)}`}>MANUAL CONTROLS</Link>
+          <Link className="display-link" href={`/communications/${encodeURIComponent(room)}`}>COMMUNICATIONS</Link>
           <Link className="display-link" href={`/display/${encodeURIComponent(room)}`} target="_blank">OPEN DISPLAY ↗</Link>
           <div className={`connection-pill ${displayOnline ? "" : "connection-pill--warning"}`}><i /> {displayOnline ? "DISPLAY ONLINE" : "DISPLAY NOT DETECTED"}</div>
         </div>
@@ -321,7 +391,7 @@ export function TextCopilotPanel({ room }: { room: string }) {
           <div style={{ display: "grid", gap: 12 }}>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
               <strong style={{ color: "#8fbfc3", fontSize: 12 }}>{model}</strong>
-              <small style={{ color: "#6e9499" }}>TRANSCRIBE: {transcriptionModel} · GM APPROVAL REQUIRED FOR DISPLAY ACTIONS</small>
+              <small style={{ color: "#6e9499" }}>TRANSCRIBE: {transcriptionModel} · GM APPROVAL REQUIRED FOR DISPLAY ACTIONS AND EMAIL</small>
             </div>
 
             <input
@@ -401,6 +471,29 @@ export function TextCopilotPanel({ room }: { room: string }) {
               </div>
             ) : null}
 
+            {pendingNotice ? (
+              <div style={{ border: "1px solid #325f9b", padding: 14, background: "#07111d" }}>
+                <div style={{ color: "#9dc8ff", fontWeight: 900, marginBottom: 8 }}>AI SUGGESTS OFFICIAL CITIZEN NOTICE</div>
+                <div style={{ color: "#d9fbfd", lineHeight: 1.5, marginBottom: 10 }}>
+                  <strong>TO:</strong> {pendingNotice.citizenId} · {pendingNotice.displayName}<br />
+                  <strong>FROM:</strong> {SENDER_LABELS[pendingNotice.senderPersona]}<br />
+                  <strong>SUBJECT:</strong> {pendingNotice.subject}<br />
+                  <strong>RESPONSE:</strong> {pendingNotice.includeResponse ? "ACKNOWLEDGE / DENY" : "NONE"}
+                </div>
+                <div style={{ whiteSpace: "pre-wrap", border: "1px solid #234264", padding: 10, color: "#b9d9ee", lineHeight: 1.5, marginBottom: 10 }}>
+                  {pendingNotice.body}
+                </div>
+                <div className="button-row" style={{ marginTop: 0 }}>
+                  <button type="button" className="is-active" disabled={noticeSending} onClick={() => void sendNotice()}>
+                    {noticeSending ? "SENDING…" : "SEND NOTICE"}
+                  </button>
+                  <button type="button" className="danger" disabled={noticeSending} onClick={() => setPendingNotice(null)}>DENY</button>
+                  <Link className="display-link" href={`/communications/${encodeURIComponent(room)}`}>OPEN COMMS TO EDIT</Link>
+                </div>
+              </div>
+            ) : null}
+
+            {noticeStatus ? <div style={{ color: "#8fffb5", fontSize: 12, fontWeight: 800 }}>{noticeStatus}</div> : null}
             {error ? <div style={{ color: "#ff8d86", fontSize: 12 }}>{error}</div> : null}
 
             <textarea
@@ -417,7 +510,7 @@ export function TextCopilotPanel({ room }: { room: string }) {
             </button>
 
             <small style={{ color: "#6e9499", lineHeight: 1.45 }}>
-              Push-to-listen only: the microphone activates while you hold the button (or L), stops when released, and automatically stops after 45 seconds. The completed clip is sent for transcription, the transcript is submitted to the existing text copilot, and the projector speaks the reply when auto-speak is enabled. There is no continuous listening or Realtime/WebRTC session.
+              Push-to-listen only: the microphone activates while you hold the button (or L), stops when released, and automatically stops after 45 seconds. Copilot may draft one private Citizen notice using roster metadata, but real email addresses remain server-side and the message is not delivered unless you press SEND NOTICE.
             </small>
           </div>
         </section>
