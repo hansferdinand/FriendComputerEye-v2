@@ -22,6 +22,7 @@ export async function GET(
   const controlPath = `/control/${encodeURIComponent(room)}`;
   const copilotPath = `/copilot/${encodeURIComponent(room)}`;
   const communicationsPath = `/communications/${encodeURIComponent(room)}`;
+  const readinessPath = `/readiness/${encodeURIComponent(room)}`;
 
   const html = `<!doctype html>
 <html lang="en">
@@ -48,9 +49,10 @@ export async function GET(
     <p>Your phone reached Friend Computer successfully. Choose a terminal for this room:</p>
     <div class="room">${safeRoom}</div>
     <a href="${controlPath}">OPEN GM CONSOLE</a>
+    <a class="secondary" href="${readinessPath}">RUN SHOW READINESS CHECK</a>
     <a class="secondary" href="${copilotPath}">OPEN AI COPILOT</a>
     <a class="secondary" href="${communicationsPath}">OPEN CITIZEN COMMUNICATIONS</a>
-    <div class="note">Manual controls remain isolated from AI and communications features so an experimental subsystem failure cannot take down the show controller.</div>
+    <div class="note">Manual controls remain isolated from AI, communications, and diagnostic features so an experimental subsystem failure cannot take down the show controller.</div>
   </main>
 </body>
 </html>`;
