@@ -6,10 +6,18 @@ import { PLAYER_PRESETS, type FriendCommand } from "@/lib/friend-computer";
 import { createCommandBus, type CommandBus, type RoomPresence } from "@/lib/transport";
 
 const PLAYER_STORAGE_KEY = "friend-computer-v2:player-names:v1";
+const MAX_LISTEN_MS = 45_000;
+const RECORDER_MIME_TYPES = [
+  "audio/webm;codecs=opus",
+  "audio/webm",
+  "audio/mp4",
+  "audio/ogg;codecs=opus",
+] as const;
 
 type HistoryItem = { role: "user" | "assistant"; text: string };
 type Proposal = { label: string; command: FriendCommand };
 type CopilotResponse = { reply?: string; proposal?: Proposal | null; model?: string; error?: string };
+type TranscribeResponse = { text?: string; model?: string; error?: string };
 
 function readPlayerNames() {
   try {
@@ -23,8 +31,33 @@ function readPlayerNames() {
   return PLAYER_PRESETS.map((preset) => preset.label);
 }
 
+function preferredRecorderMime() {
+  if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") return "";
+  return RECORDER_MIME_TYPES.find((type) => MediaRecorder.isTypeSupported(type)) ?? "";
+}
+
+function extensionForMime(mimeType: string) {
+  if (mimeType.includes("mp4")) return "mp4";
+  if (mimeType.includes("ogg")) return "ogg";
+  if (mimeType.includes("mpeg") || mimeType.includes("mp3")) return "mp3";
+  if (mimeType.includes("wav")) return "wav";
+  return "webm";
+}
+
+function isTypingTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(target.tagName);
+}
+
 export function TextCopilotPanel({ room }: { room: string }) {
   const busRef = useRef<CommandBus | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const listenHeldRef = useRef(false);
+  const listenStartedAtRef = useRef(0);
+  const listenTimeoutRef = useRef<number | null>(null);
+
   const [transport, setTransport] = useState<CommandBus["transport"]>("connecting");
   const [presence, setPresence] = useState<RoomPresence>({ displays: 0, controls: 0 });
   const [playerNames, setPlayerNames] = useState<string[]>(() => PLAYER_PRESETS.map((preset) => preset.label));
@@ -33,8 +66,12 @@ export function TextCopilotPanel({ room }: { room: string }) {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [pending, setPending] = useState<Proposal | null>(null);
   const [loading, setLoading] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [lastTranscript, setLastTranscript] = useState("");
   const [error, setError] = useState("");
   const [model, setModel] = useState("gpt-5.6-terra");
+  const [transcriptionModel, setTranscriptionModel] = useState("gpt-4o-mini-transcribe");
   const [autoSpeak, setAutoSpeak] = useState(true);
 
   useEffect(() => {
@@ -47,15 +84,27 @@ export function TextCopilotPanel({ room }: { room: string }) {
     };
   }, [room]);
 
+  useEffect(() => {
+    return () => {
+      listenHeldRef.current = false;
+      if (listenTimeoutRef.current) window.clearTimeout(listenTimeoutRef.current);
+      const recorder = recorderRef.current;
+      if (recorder && recorder.state !== "inactive") recorder.stop();
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      recorderRef.current = null;
+      streamRef.current = null;
+    };
+  }, []);
+
   const sendSpeech = useCallback((text: string) => {
     const cleaned = text.trim();
     if (!cleaned) return;
     busRef.current?.send({ type: "speak", text: cleaned });
   }, []);
 
-  const askComputer = useCallback(async () => {
-    const text = prompt.trim();
-    if (!text || !gmKey.trim() || loading) return;
+  const submitPrompt = useCallback(async (textValue: string) => {
+    const text = textValue.trim();
+    if (!text || !gmKey.trim() || loading) return false;
     setLoading(true);
     setError("");
     setPending(null);
@@ -81,12 +130,165 @@ export function TextCopilotPanel({ room }: { room: string }) {
       setPending(data.proposal ?? null);
       setPrompt("");
       if (autoSpeak) sendSpeech(data.reply);
+      return true;
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to reach Friend Computer.");
+      return false;
     } finally {
       setLoading(false);
     }
-  }, [autoSpeak, gmKey, history, loading, playerNames, prompt, room, sendSpeech]);
+  }, [autoSpeak, gmKey, history, loading, playerNames, room, sendSpeech]);
+
+  const askComputer = useCallback(async () => {
+    await submitPrompt(prompt);
+  }, [prompt, submitPrompt]);
+
+  const transcribeRecording = useCallback(async (blob: Blob, mimeType: string) => {
+    if (!blob.size || !gmKey.trim()) return;
+    setTranscribing(true);
+    setError("");
+
+    let transcript = "";
+    try {
+      const form = new FormData();
+      const effectiveMime = blob.type || mimeType || "audio/webm";
+      form.append("audio", blob, `friend-computer-listen.${extensionForMime(effectiveMime)}`);
+      form.append("playerNames", playerNames.join(", "));
+
+      const response = await fetch("/api/transcribe", {
+        method: "POST",
+        headers: { "x-friend-computer-gm-key": gmKey },
+        body: form,
+      });
+      const data = (await response.json()) as TranscribeResponse;
+      if (!response.ok || !data.text) throw new Error(data.error || "Friend Computer could not transcribe that recording.");
+
+      transcript = data.text.trim();
+      if (data.model) setTranscriptionModel(data.model);
+      setLastTranscript(transcript);
+      setPrompt(transcript);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to transcribe the recording.");
+    } finally {
+      setTranscribing(false);
+    }
+
+    if (transcript) await submitPrompt(transcript);
+  }, [gmKey, playerNames, submitPrompt]);
+
+  const stopListening = useCallback(() => {
+    listenHeldRef.current = false;
+    if (listenTimeoutRef.current) {
+      window.clearTimeout(listenTimeoutRef.current);
+      listenTimeoutRef.current = null;
+    }
+    const recorder = recorderRef.current;
+    if (recorder && recorder.state !== "inactive") recorder.stop();
+  }, []);
+
+  const startListening = useCallback(async () => {
+    if (!gmKey.trim()) {
+      setError("Enter the GM AI passphrase before enabling Friend Computer's microphone.");
+      listenHeldRef.current = false;
+      return;
+    }
+    if (loading || transcribing || recording) return;
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setError("This browser does not support push-to-listen recording.");
+      listenHeldRef.current = false;
+      return;
+    }
+
+    setError("");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+
+      if (!listenHeldRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+
+      streamRef.current = stream;
+      chunksRef.current = [];
+      const requestedMime = preferredRecorderMime();
+      let recorder: MediaRecorder;
+      try {
+        recorder = requestedMime ? new MediaRecorder(stream, { mimeType: requestedMime }) : new MediaRecorder(stream);
+      } catch {
+        recorder = new MediaRecorder(stream);
+      }
+
+      recorderRef.current = recorder;
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunksRef.current.push(event.data);
+      };
+      recorder.onerror = () => {
+        setError("The browser microphone recorder encountered an error.");
+      };
+      recorder.onstop = () => {
+        if (listenTimeoutRef.current) window.clearTimeout(listenTimeoutRef.current);
+        listenTimeoutRef.current = null;
+        setRecording(false);
+        recorderRef.current = null;
+        stream.getTracks().forEach((track) => track.stop());
+        if (streamRef.current === stream) streamRef.current = null;
+
+        const elapsed = Date.now() - listenStartedAtRef.current;
+        const chunks = chunksRef.current;
+        chunksRef.current = [];
+        if (elapsed < 250 || chunks.length === 0) return;
+        const recordedMime = recorder.mimeType || requestedMime || chunks[0]?.type || "audio/webm";
+        const blob = new Blob(chunks, { type: recordedMime });
+        void transcribeRecording(blob, recordedMime);
+      };
+
+      listenStartedAtRef.current = Date.now();
+      recorder.start(250);
+      setRecording(true);
+      listenTimeoutRef.current = window.setTimeout(() => {
+        listenHeldRef.current = false;
+        if (recorder.state !== "inactive") recorder.stop();
+      }, MAX_LISTEN_MS);
+    } catch (reason) {
+      listenHeldRef.current = false;
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      const name = reason instanceof DOMException ? reason.name : "";
+      setError(
+        name === "NotAllowedError"
+          ? "Microphone permission was denied. Allow microphone access for this site and try again."
+          : "Friend Computer could not access this device's microphone.",
+      );
+    }
+  }, [gmKey, loading, recording, transcribeRecording, transcribing]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code !== "KeyL" || event.repeat || isTypingTarget(event.target)) return;
+      event.preventDefault();
+      listenHeldRef.current = true;
+      void startListening();
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.code !== "KeyL") return;
+      if (listenHeldRef.current || recording) {
+        event.preventDefault();
+        stopListening();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, [recording, startListening, stopListening]);
 
   const approve = useCallback(() => {
     if (!pending) return;
@@ -97,6 +299,7 @@ export function TextCopilotPanel({ room }: { room: string }) {
   const displayOnline = transport === "realtime" && presence.displays > 0;
   const latestAssistant = [...history].reverse().find((item) => item.role === "assistant") ?? null;
   const latestReply = latestAssistant?.text ?? "Friend Computer is awaiting a properly authorized inquiry.";
+  const listenBusy = loading || transcribing;
 
   return (
     <main className="control-shell">
@@ -114,11 +317,11 @@ export function TextCopilotPanel({ room }: { room: string }) {
 
       <div className="control-grid">
         <section className="panel" style={{ gridColumn: "1 / -1" }}>
-          <div className="panel-heading"><span>AI</span><h2>Text Copilot</h2></div>
+          <div className="panel-heading"><span>AI</span><h2>Copilot</h2></div>
           <div style={{ display: "grid", gap: 12 }}>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
               <strong style={{ color: "#8fbfc3", fontSize: 12 }}>{model}</strong>
-              <small style={{ color: "#6e9499" }}>SERVER-SIDE RESPONSES API · GM APPROVAL REQUIRED</small>
+              <small style={{ color: "#6e9499" }}>TRANSCRIBE: {transcriptionModel} · GM APPROVAL REQUIRED FOR DISPLAY ACTIONS</small>
             </div>
 
             <input
@@ -129,6 +332,40 @@ export function TextCopilotPanel({ room }: { room: string }) {
               placeholder="GM AI passphrase"
               aria-label="Friend Computer GM AI passphrase"
             />
+
+            <button
+              type="button"
+              className={recording ? "danger" : "primary-action"}
+              disabled={listenBusy || !gmKey.trim()}
+              onPointerDown={(event) => {
+                if (listenBusy || !gmKey.trim()) return;
+                event.preventDefault();
+                event.currentTarget.setPointerCapture(event.pointerId);
+                listenHeldRef.current = true;
+                void startListening();
+              }}
+              onPointerUp={(event) => {
+                event.preventDefault();
+                stopListening();
+              }}
+              onPointerCancel={stopListening}
+              style={{ minHeight: 76, touchAction: "none", userSelect: "none", fontSize: 16 }}
+            >
+              {recording
+                ? "● LISTENING — RELEASE TO SEND"
+                : transcribing
+                  ? "TRANSCRIBING…"
+                  : loading
+                    ? "FRIEND COMPUTER IS RESPONDING…"
+                    : "HOLD TO LISTEN · OR HOLD L"}
+            </button>
+
+            {lastTranscript ? (
+              <div style={{ border: "1px solid #29484b", padding: 10, color: "#8fbfc3", lineHeight: 1.4 }}>
+                <small style={{ display: "block", color: "#6e9499", marginBottom: 5 }}>LAST HEARD</small>
+                {lastTranscript}
+              </div>
+            ) : null}
 
             <div style={{ border: "1px solid #1e4347", padding: 12, minHeight: 86, color: "#aeecef", lineHeight: 1.5 }}>
               <small style={{ display: "block", color: "#6e9499", marginBottom: 6 }}>LATEST COMPUTER RESPONSE</small>
@@ -172,15 +409,15 @@ export function TextCopilotPanel({ room }: { room: string }) {
               onKeyDown={(event) => {
                 if ((event.ctrlKey || event.metaKey) && event.key === "Enter") void askComputer();
               }}
-              placeholder="Citizen 2 claims the unauthorized laser discharge was caused by poor maintenance. Respond as Friend Computer..."
-              style={{ minHeight: 110 }}
+              placeholder="Or type what Friend Computer should respond to..."
+              style={{ minHeight: 96 }}
             />
-            <button type="button" className="primary-action" disabled={loading || !gmKey.trim() || !prompt.trim()} onClick={() => void askComputer()}>
+            <button type="button" className="primary-action" disabled={listenBusy || !gmKey.trim() || !prompt.trim()} onClick={() => void askComputer()}>
               {loading ? "CONSULTING FRIEND COMPUTER…" : "ASK FRIEND COMPUTER"}
             </button>
 
             <small style={{ color: "#6e9499", lineHeight: 1.45 }}>
-              Replies are spoken by the projector through its existing browser speech engine when auto-speak is enabled. Eye, threat, status, and effect proposals still require GM approval. No microphone or WebRTC code loads on this page.
+              Push-to-listen only: the microphone activates while you hold the button (or L), stops when released, and automatically stops after 45 seconds. The completed clip is sent for transcription, the transcript is submitted to the existing text copilot, and the projector speaks the reply when auto-speak is enabled. There is no continuous listening or Realtime/WebRTC session.
             </small>
           </div>
         </section>
