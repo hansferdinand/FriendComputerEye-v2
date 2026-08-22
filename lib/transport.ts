@@ -5,6 +5,7 @@ import { getSupabaseClient } from "@/lib/supabase-client";
 
 const CHANNEL_PREFIX = "friend-computer-v2";
 const REMOTE_EVENT = "command";
+const RECEIPT_EVENT = "receipt";
 
 function createId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -20,9 +21,13 @@ function normalizedRoomName(room: string) {
 export type TransportKind = "connecting" | "realtime" | "broadcast" | "storage" | "none";
 export type PresenceRole = "display" | "control";
 export type RoomPresence = { displays: number; controls: number };
+export type CommandReceipt = { id: string; receivedAt: number };
+
+type SupabaseBrowserClient = ReturnType<typeof getSupabaseClient>;
+type RoomChannel = ReturnType<SupabaseBrowserClient["channel"]>;
 
 export type CommandBus = {
-  send: (command: FriendCommand) => void;
+  send: (command: FriendCommand) => string;
   close: () => void;
   readonly transport: TransportKind;
 };
@@ -32,6 +37,7 @@ export function createCommandBus(
   onCommand?: (command: FriendCommand) => void,
   onTransportChange?: (transport: TransportKind) => void,
   onPresenceChange?: (presence: RoomPresence) => void,
+  onReceipt?: (receipt: CommandReceipt) => void,
 ): CommandBus {
   const normalizedRoom = normalizedRoomName(room);
   const channelName = `${CHANNEL_PREFIX}:${normalizedRoom}`;
@@ -42,6 +48,7 @@ export function createCommandBus(
   let channel: BroadcastChannel | null = null;
   let storageAvailable = false;
   let remoteConnected = false;
+  let remoteChannel: RoomChannel | null = null;
   let closed = false;
 
   const localTransport = () =>
@@ -68,10 +75,23 @@ export function createCommandBus(
     }
   };
 
+  const acknowledge = (id: string) => {
+    if (role !== "display" || !remoteChannel) return;
+    const receipt: CommandReceipt = { id, receivedAt: Date.now() };
+    void remoteChannel.send({
+      type: "broadcast",
+      event: RECEIPT_EVENT,
+      payload: receipt,
+    }).catch(() => {
+      // Receipts are diagnostic only; command execution must never depend on them.
+    });
+  };
+
   const receive = (envelope: CommandEnvelope | null | undefined) => {
     if (!envelope?.id || !envelope.command || seen.has(envelope.id)) return;
     remember(envelope.id);
     onCommand?.(envelope.command);
+    if (onCommand) acknowledge(envelope.id);
   };
 
   if (typeof BroadcastChannel !== "undefined") {
@@ -104,10 +124,9 @@ export function createCommandBus(
   if (storageAvailable) window.addEventListener("storage", onStorage);
 
   const supabase = getSupabaseClient();
-  let remoteChannel: ReturnType<typeof supabase.channel>;
 
   const emitPresence = () => {
-    if (closed || !onPresenceChange) return;
+    if (closed || !onPresenceChange || !remoteChannel) return;
     const state = remoteChannel.presenceState();
     let displays = 0;
     let controls = 0;
@@ -132,9 +151,12 @@ export function createCommandBus(
     .on("broadcast", { event: REMOTE_EVENT }, (payload) => {
       receive(payload.payload as CommandEnvelope);
     })
+    .on("broadcast", { event: RECEIPT_EVENT }, (payload) => {
+      if (role === "control") onReceipt?.(payload.payload as CommandReceipt);
+    })
     .on("presence", { event: "sync" }, emitPresence)
     .subscribe((status) => {
-      if (closed) return;
+      if (closed || !remoteChannel) return;
       remoteConnected = status === "SUBSCRIBED";
       emitTransport();
 
@@ -173,29 +195,33 @@ export function createCommandBus(
 
       // Supabase Broadcast adds cross-device delivery. If the socket has not
       // subscribed yet, supabase-js transparently falls back to HTTP delivery.
-      void remoteChannel
-        .send({
-          type: "broadcast",
-          event: REMOTE_EVENT,
-          payload: envelope,
-        })
-        .then((result) => {
-          if (result === "ok") return;
-          remoteConnected = false;
-          emitTransport();
-          emitNoPresence();
-        })
-        .catch(() => {
-          remoteConnected = false;
-          emitTransport();
-          emitNoPresence();
-        });
+      if (remoteChannel) {
+        void remoteChannel
+          .send({
+            type: "broadcast",
+            event: REMOTE_EVENT,
+            payload: envelope,
+          })
+          .then((result) => {
+            if (result === "ok") return;
+            remoteConnected = false;
+            emitTransport();
+            emitNoPresence();
+          })
+          .catch(() => {
+            remoteConnected = false;
+            emitTransport();
+            emitNoPresence();
+          });
+      }
+
+      return envelope.id;
     },
     close() {
       closed = true;
       channel?.close();
       if (storageAvailable) window.removeEventListener("storage", onStorage);
-      void supabase.removeChannel(remoteChannel);
+      if (remoteChannel) void supabase.removeChannel(remoteChannel);
     },
   };
 }
