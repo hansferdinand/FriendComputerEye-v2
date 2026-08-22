@@ -66,7 +66,11 @@ export function TextCopilotPanel({ room }: { room: string }) {
       if (!response.ok || !data.reply) throw new Error(data.error || "Friend Computer declined to answer.");
 
       if (data.model) setModel(data.model);
-      setHistory((current) => [...current, { role: "user", text }, { role: "assistant", text: data.reply! }].slice(-8));
+      const additions: HistoryItem[] = [
+        { role: "user", text },
+        { role: "assistant", text: data.reply },
+      ];
+      setHistory((current) => [...current, ...additions].slice(-8));
       setPending(data.proposal ?? null);
       setPrompt("");
     } catch (reason) {
