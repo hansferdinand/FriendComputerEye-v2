@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AmbientIdleEffects } from "@/components/AmbientIdleEffects";
 import { FriendEye } from "@/components/FriendEye";
 import {
   ADVERTISEMENTS,
@@ -317,7 +318,10 @@ export function FriendComputerDisplay({
 
   useEffect(() => {
     let timer = window.setTimeout(function blink() {
-      if (overlay.kind === "none") setBlinkNonce((value) => value + 1);
+      if (overlay.kind === "none") {
+        if (Math.random() < 0.18) setDoubleBlinkNonce((value) => value + 1);
+        else setBlinkNonce((value) => value + 1);
+      }
       timer = window.setTimeout(blink, 2800 + Math.random() * 3800);
     }, 2400 + Math.random() * 2600);
     return () => window.clearTimeout(timer);
@@ -397,6 +401,7 @@ export function FriendComputerDisplay({
   }, [acquireWakeLock, audioEnabled]);
 
   const currentAd = overlay.kind === "ad" ? ADVERTISEMENTS[overlay.index] : null;
+  const ambientActive = audioReady && overlay.kind === "none" && !speaking;
 
   return (
     <main className={`display-shell ${speaking ? "display-shell--speaking" : ""} ${audioReady ? "display-shell--active" : ""}`}>
@@ -416,7 +421,9 @@ export function FriendComputerDisplay({
             blinkNonce={blinkNonce}
             doubleBlinkNonce={doubleBlinkNonce}
             visible={state.eyeVisible}
+            ambient={ambientActive}
           />
+          <AmbientIdleEffects active={ambientActive} />
 
           {overlay.kind === "error" ? (
             <div className="overlay overlay--error">SYSTEM ERROR<br /><small>REPORT TO NEAREST TERMINATION BOOTH</small></div>

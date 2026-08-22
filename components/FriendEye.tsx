@@ -11,6 +11,7 @@ type Props = {
   blinkNonce: number;
   doubleBlinkNonce: number;
   visible: boolean;
+  ambient?: boolean;
 };
 
 type LidGeometry = {
@@ -26,6 +27,8 @@ type LidShape = {
   top: string;
   bottom: string;
 };
+
+type AmbientTint = "none" | "green" | "cold" | "amber";
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 const lerp = (from: number, to: number, amount: number) => from + (to - from) * amount;
@@ -140,6 +143,13 @@ function blinkAmountAt(elapsed: number, count: number) {
   return { amount: 0, done: false };
 }
 
+function pickAmbientTint(): Exclude<AmbientTint, "none"> {
+  const roll = Math.random();
+  if (roll < 0.5) return "green";
+  if (roll < 0.8) return "cold";
+  return "amber";
+}
+
 export function FriendEye({
   gazeX,
   gazeY,
@@ -148,10 +158,12 @@ export function FriendEye({
   blinkNonce,
   doubleBlinkNonce,
   visible,
+  ambient = false,
 }: Props) {
   const [micro, setMicro] = useState({ x: 0, y: 0 });
   const [pupilBreath, setPupilBreath] = useState(1);
   const [blinkAmount, setBlinkAmount] = useState(0);
+  const [ambientTint, setAmbientTint] = useState<AmbientTint>("none");
   const previousDoubleBlink = useRef(doubleBlinkNonce);
   const lids = useMemo(
     () => getLids(expression, intensity, blinkAmount),
@@ -176,6 +188,36 @@ export function FriendEye({
     }, 2400);
     return () => window.clearInterval(timer);
   }, [expression]);
+
+  useEffect(() => {
+    if (!ambient || !visible) {
+      setAmbientTint("none");
+      return;
+    }
+
+    let nextTimer = 0;
+    let clearTimer = 0;
+    let cancelled = false;
+
+    const schedule = () => {
+      nextTimer = window.setTimeout(() => {
+        if (cancelled) return;
+        setAmbientTint(pickAmbientTint());
+        clearTimer = window.setTimeout(() => {
+          if (cancelled) return;
+          setAmbientTint("none");
+          schedule();
+        }, 1200 + Math.random() * 2200);
+      }, 6500 + Math.random() * 14500);
+    };
+
+    schedule();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(nextTimer);
+      window.clearTimeout(clearTimer);
+    };
+  }, [ambient, visible]);
 
   useEffect(() => {
     if (!blinkNonce && !doubleBlinkNonce) return;
@@ -228,6 +270,24 @@ export function FriendEye({
             <stop offset="80%" stopColor="#07518c" />
             <stop offset="100%" stopColor="#001a35" />
           </radialGradient>
+          <radialGradient id="iris-green" cx="42%" cy="38%" r="65%">
+            <stop offset="0%" stopColor="#c8ffe8" />
+            <stop offset="42%" stopColor="#39dba7" />
+            <stop offset="80%" stopColor="#08705c" />
+            <stop offset="100%" stopColor="#00251e" />
+          </radialGradient>
+          <radialGradient id="iris-cold" cx="42%" cy="38%" r="65%">
+            <stop offset="0%" stopColor="#ffffff" />
+            <stop offset="44%" stopColor="#bcecff" />
+            <stop offset="82%" stopColor="#4d7f99" />
+            <stop offset="100%" stopColor="#10242f" />
+          </radialGradient>
+          <radialGradient id="iris-amber" cx="42%" cy="38%" r="65%">
+            <stop offset="0%" stopColor="#fff3bd" />
+            <stop offset="42%" stopColor="#e3a436" />
+            <stop offset="80%" stopColor="#815016" />
+            <stop offset="100%" stopColor="#281500" />
+          </radialGradient>
           <radialGradient id="iris-red" cx="42%" cy="38%" r="65%">
             <stop offset="0%" stopColor="#ff745f" />
             <stop offset="45%" stopColor="#df2018" />
@@ -261,6 +321,33 @@ export function FriendEye({
               style={{ opacity: dangerOpacity * 0.48, transition: "opacity 320ms ease" }}
             />
             <circle cx="500" cy="350" r="136" fill="url(#iris-blue)" stroke="#62cfff" strokeWidth="5" />
+            <circle
+              cx="500"
+              cy="350"
+              r="136"
+              fill="url(#iris-green)"
+              stroke="#76ffd2"
+              strokeWidth="5"
+              style={{ opacity: ambientTint === "green" ? 0.72 : 0, transition: "opacity 900ms ease" }}
+            />
+            <circle
+              cx="500"
+              cy="350"
+              r="136"
+              fill="url(#iris-cold)"
+              stroke="#d7f5ff"
+              strokeWidth="5"
+              style={{ opacity: ambientTint === "cold" ? 0.68 : 0, transition: "opacity 900ms ease" }}
+            />
+            <circle
+              cx="500"
+              cy="350"
+              r="136"
+              fill="url(#iris-amber)"
+              stroke="#ffd878"
+              strokeWidth="5"
+              style={{ opacity: ambientTint === "amber" ? 0.62 : 0, transition: "opacity 900ms ease" }}
+            />
             <circle
               cx="500"
               cy="350"
