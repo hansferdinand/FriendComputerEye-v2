@@ -20,6 +20,7 @@ export async function GET(
   const { room } = await context.params;
   const safeRoom = escapeHtml(room.toUpperCase());
   const controlPath = `/control/${encodeURIComponent(room)}`;
+  const copilotPath = `/copilot/${encodeURIComponent(room)}`;
 
   const html = `<!doctype html>
 <html lang="en">
@@ -35,17 +36,19 @@ export async function GET(
     small{color:#7aa9ad;letter-spacing:.12em}h1{margin:10px 0 12px;font-size:32px;line-height:1.05}
     p{color:#a7c7ca;line-height:1.5}.room{padding:10px;border:1px solid #1e555a;background:#020607;color:#87f6fb;word-break:break-all}
     a{display:block;margin-top:18px;padding:14px 16px;text-align:center;text-decoration:none;font-weight:900;letter-spacing:.08em;color:#001315;background:#48f6ff}
-    .note{margin-top:14px;font-size:12px;color:#6e9499}
+    a.secondary{margin-top:10px;color:#9cf5f8;background:#020607;border:1px solid #27646a}
+    .note{margin-top:14px;font-size:12px;color:#6e9499;line-height:1.4}
   </style>
 </head>
 <body>
   <main>
     <small>ALPHA COMPLEX NETWORK</small>
     <h1>Connection established.</h1>
-    <p>Your phone reached Friend Computer successfully. Continue to the GM console for this room:</p>
+    <p>Your phone reached Friend Computer successfully. Choose a terminal for this room:</p>
     <div class="room">${safeRoom}</div>
     <a href="${controlPath}">OPEN GM CONSOLE</a>
-    <div class="note">If this page loads but the GM console does not, the problem is inside the interactive browser app rather than the QR code or network.</div>
+    <a class="secondary" href="${copilotPath}">OPEN AI COPILOT</a>
+    <div class="note">Manual controls remain isolated from experimental AI features so a copilot failure cannot take down the show controller.</div>
   </main>
 </body>
 </html>`;
