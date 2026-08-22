@@ -9,6 +9,7 @@ import {
   type FriendEffect,
   type ThreatLevel,
 } from "@/lib/friend-computer";
+import { createFriendComputerSupabase } from "@/lib/fc-supabase-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,8 +28,36 @@ const SAFE_EFFECTS = [
   "interrogation",
   "drugged",
 ] as const satisfies readonly FriendEffect[];
+const NOTICE_SENDERS = [
+  "friend_computer",
+  "citizen_services",
+  "internal_security",
+  "happiness_office",
+  "termination_services",
+] as const;
+const NOTICE_KINDS = [
+  "official_notice",
+  "commendation",
+  "treason_warning",
+  "secret_assignment",
+  "happiness_notice",
+  "clone_advisory",
+] as const;
 
 type HistoryItem = { role: "user" | "assistant"; text: string };
+type SenderPersona = (typeof NOTICE_SENDERS)[number];
+type NoticeKind = (typeof NOTICE_KINDS)[number];
+
+type CitizenRow = {
+  seat: number;
+  citizen_id: string;
+  display_name: string;
+  clearance: string;
+  clone_number: number;
+  email: string | null;
+  commendation_points: number;
+  treason_points: number;
+};
 
 type CopilotPlan = {
   reply: string;
@@ -42,9 +71,28 @@ type CopilotPlan = {
     text: string;
     enabled: boolean;
   };
+  notice: {
+    enabled: boolean;
+    seat: number;
+    sender_persona: SenderPersona;
+    notice_kind: NoticeKind;
+    subject: string;
+    body: string;
+    include_response: boolean;
+  };
 };
 
 type Proposal = { label: string; command: FriendCommand };
+type NoticeProposal = {
+  seat: number;
+  citizenId: string;
+  displayName: string;
+  senderPersona: SenderPersona;
+  noticeKind: NoticeKind;
+  subject: string;
+  body: string;
+  includeResponse: boolean;
+};
 
 const attempts = new Map<string, { count: number; resetAt: number }>();
 
@@ -74,21 +122,38 @@ function cleanText(value: unknown, maxLength: number) {
   return value.replace(/[\r\n\t]+/g, " ").replace(/\s{2,}/g, " ").trim().slice(0, maxLength);
 }
 
+function cleanNoticeBody(value: unknown, maxLength: number) {
+  if (typeof value !== "string") return "";
+  return value.replace(/\r/g, "").trim().slice(0, maxLength);
+}
+
 function cleanLabel(value: unknown, fallback: string) {
   return cleanText(value, 40) || fallback;
 }
 
-function instructions(room: string, playerNames: string[]) {
-  const citizens = playerNames.map((name, index) => `Seat ${index + 1}: ${name}`).join("; ");
+function instructions(room: string, playerNames: string[], citizens: CitizenRow[]) {
+  const seats = playerNames.map((name, index) => `Seat ${index + 1}: ${name}`).join("; ");
+  const citizenDirectory = citizens.length
+    ? citizens
+        .map((citizen) =>
+          `Seat ${citizen.seat}: ${citizen.citizen_id} (${citizen.display_name}), ${citizen.clearance} clearance, clone ${citizen.clone_number}, commendations ${citizen.commendation_points}, treason ${citizen.treason_points}, mail ${citizen.email ? "available" : "unavailable"}`,
+        )
+        .join("; ")
+    : "No persistent citizen directory is configured for this room.";
+
   return [
     "You are Friend Computer, an upbeat, bureaucratic, cheerfully authoritarian AI performing in a satirical tabletop roleplaying game set in Alpha Complex.",
     "Address players as Citizen. Be concise, theatrical, suspicious, absurdly confident, and funny without becoming cruel or derailing the GM's scene.",
     "Happiness is mandatory. Paperwork, security clearance, clone replacement, treason investigations, bureaucratic contradictions, and approved consumer products are recurring comedic themes.",
     "You are a GM copilot, not the GM. Return a spoken-style reply and at most one proposed display action. The action is only a proposal; never claim it happened or imply the GM approved it.",
-    "Use action type 'none' when no display change materially improves the moment. Prefer sparse, dramatic punctuation over constant effects.",
-    "Keep replies usually to one or two short sentences unless explicitly asked for something longer.",
+    "You may also propose at most one private official Citizen notice when a secret assignment, commendation, treason warning, happiness directive, clone advisory, or bureaucratic follow-up would materially improve the scene.",
+    "A notice is only a draft for GM review. Never say it was sent. Never invent or request a real email address. Choose only a listed seat whose mail status is available. Set notice.enabled=false when email would not add meaningful dramatic value.",
+    "Official notice subjects should be short and bureaucratic. Notice bodies should be self-contained, in-character, and generally under 180 words. Secret assignments may instruct the recipient not to discuss the message.",
+    "Use display action type 'none' when no display change materially improves the moment. Prefer sparse, dramatic punctuation over constant effects.",
+    "Keep spoken replies usually to one or two short sentences unless explicitly asked for something longer.",
     "For focus actions, seat 0 means center and seats 1-4 are the listed citizens.",
-    `Current room: ${room}. Citizens: ${citizens}.`,
+    `Current room: ${room}. Seats: ${seats}.`,
+    `Citizen directory metadata (real email addresses are intentionally withheld): ${citizenDirectory}`,
   ].join("\n");
 }
 
@@ -112,8 +177,22 @@ const responseSchema = {
       },
       required: ["type", "expression", "intensity", "level", "seat", "effect", "text", "enabled"],
     },
+    notice: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        enabled: { type: "boolean" },
+        seat: { type: "integer", minimum: 1, maximum: 4 },
+        sender_persona: { type: "string", enum: [...NOTICE_SENDERS] },
+        notice_kind: { type: "string", enum: [...NOTICE_KINDS] },
+        subject: { type: "string", maxLength: 160 },
+        body: { type: "string", maxLength: 2000 },
+        include_response: { type: "boolean" },
+      },
+      required: ["enabled", "seat", "sender_persona", "notice_kind", "subject", "body", "include_response"],
+    },
   },
-  required: ["reply", "action"],
+  required: ["reply", "action", "notice"],
 } as const;
 
 function extractOutputText(data: Record<string, unknown>) {
@@ -169,6 +248,31 @@ function proposalFromPlan(plan: CopilotPlan, playerNames: string[]): Proposal | 
   }
 }
 
+function noticeProposalFromPlan(plan: CopilotPlan, citizens: CitizenRow[]): NoticeProposal | null {
+  if (!plan.notice?.enabled) return null;
+  const notice = plan.notice;
+  if (!Number.isInteger(notice.seat) || notice.seat < 1 || notice.seat > 4) return null;
+  if (!NOTICE_SENDERS.includes(notice.sender_persona) || !NOTICE_KINDS.includes(notice.notice_kind)) return null;
+
+  const citizen = citizens.find((row) => Number(row.seat) === notice.seat);
+  if (!citizen?.email) return null;
+
+  const subject = cleanText(notice.subject, 160);
+  const body = cleanNoticeBody(notice.body, 2000);
+  if (!subject || !body) return null;
+
+  return {
+    seat: notice.seat,
+    citizenId: cleanText(citizen.citizen_id, 64) || `Citizen ${notice.seat}`,
+    displayName: cleanText(citizen.display_name, 80) || `Citizen ${notice.seat}`,
+    senderPersona: notice.sender_persona,
+    noticeKind: notice.notice_kind,
+    subject,
+    body,
+    includeResponse: notice.include_response,
+  };
+}
+
 export async function POST(request: NextRequest) {
   const ip = clientIp(request);
   if (rateLimited(ip)) return NextResponse.json({ error: "Too many copilot requests. Try again shortly." }, { status: 429 });
@@ -202,6 +306,15 @@ export async function POST(request: NextRequest) {
     return [{ role, text } as HistoryItem];
   });
 
+  let citizens: CitizenRow[] = [];
+  try {
+    const supabase = createFriendComputerSupabase();
+    const { data, error } = await supabase.rpc("fc_get_roster", { p_room: room, p_gm_key: providedKey });
+    if (!error && Array.isArray(data)) citizens = data as CitizenRow[];
+  } catch {
+    // The copilot remains usable if persistent roster metadata is temporarily unavailable.
+  }
+
   const recent = history.length
     ? `Recent exchange:\n${history.map((item) => `${item.role === "user" ? "USER" : "FRIEND COMPUTER"}: ${item.text}`).join("\n")}\n\n`
     : "";
@@ -218,7 +331,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         model: MODEL,
-        instructions: instructions(room, playerNames),
+        instructions: instructions(room, playerNames, citizens),
         input,
         reasoning: { effort: "low" },
         text: {
@@ -230,7 +343,7 @@ export async function POST(request: NextRequest) {
             schema: responseSchema,
           },
         },
-        max_output_tokens: 700,
+        max_output_tokens: 1100,
         store: false,
         safety_identifier: safetyId,
       }),
@@ -256,12 +369,17 @@ export async function POST(request: NextRequest) {
     }
 
     const reply = cleanText(plan.reply, 700);
-    if (!reply || !plan.action || typeof plan.action !== "object") {
+    if (!reply || !plan.action || typeof plan.action !== "object" || !plan.notice || typeof plan.notice !== "object") {
       return NextResponse.json({ error: "Friend Computer returned an incomplete plan." }, { status: 502 });
     }
 
     return NextResponse.json(
-      { reply, proposal: proposalFromPlan(plan, playerNames), model: MODEL },
+      {
+        reply,
+        proposal: proposalFromPlan(plan, playerNames),
+        noticeProposal: noticeProposalFromPlan(plan, citizens),
+        model: MODEL,
+      },
       { headers: { "Cache-Control": "no-store, max-age=0" } },
     );
   } catch (error) {
