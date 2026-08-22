@@ -18,12 +18,12 @@ export function JoinGmQr({ room, compact = false }: { room: string; compact?: bo
     setOrigin(joinOrigin());
   }, []);
 
-  const controlUrl = useMemo(
-    () => (origin ? `${origin}/control/${encodeURIComponent(room)}` : ""),
+  const joinUrl = useMemo(
+    () => (origin ? `${origin}/join/${encodeURIComponent(room)}` : ""),
     [origin, room],
   );
 
-  if (!controlUrl) return null;
+  if (!joinUrl) return null;
 
   return (
     <div
@@ -39,7 +39,7 @@ export function JoinGmQr({ room, compact = false }: { room: string; compact?: bo
     >
       <div style={{ background: "white", padding: compact ? 10 : 14, lineHeight: 0 }}>
         <QRCodeSVG
-          value={controlUrl}
+          value={joinUrl}
           size={compact ? 190 : 250}
           level="M"
           bgColor="#ffffff"
@@ -49,7 +49,10 @@ export function JoinGmQr({ room, compact = false }: { room: string; compact?: bo
       </div>
       <strong style={{ letterSpacing: ".08em" }}>JOIN GM CONSOLE</strong>
       <small style={{ color: "#87b9bd", textAlign: "center", maxWidth: 420 }}>
-        Scan with your phone. The room code is already included.
+        Scan with your phone. A lightweight connection check opens first, then the GM console.
+      </small>
+      <small style={{ color: "#557d81", textAlign: "center", maxWidth: 420, wordBreak: "break-all", fontSize: 9 }}>
+        {joinUrl}
       </small>
     </div>
   );
