@@ -1,0 +1,87 @@
+.root {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.staticBurst {
+  position: absolute;
+  inset: -18%;
+  opacity: 0;
+  background:
+    repeating-radial-gradient(circle at 23% 37%, rgba(236, 255, 255, .11) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(0deg, rgba(255,255,255,.035) 0 1px, transparent 1px 4px),
+    repeating-linear-gradient(91deg, rgba(72,246,255,.045) 0 1px, transparent 1px 7px);
+  background-size: 7px 7px, 100% 5px, 11px 100%;
+  mix-blend-mode: screen;
+  filter: contrast(1.35);
+  animation: ambientStaticBurst 520ms steps(7, end) forwards;
+}
+
+.roll {
+  position: absolute;
+  left: -5%;
+  right: -5%;
+  top: -34%;
+  height: 30%;
+  opacity: 0;
+  background:
+    linear-gradient(
+      to bottom,
+      transparent 0%,
+      rgba(204,255,250,.018) 20%,
+      rgba(204,255,250,.075) 47%,
+      rgba(204,255,250,.025) 63%,
+      transparent 100%
+    );
+  box-shadow: 0 0 28px rgba(126,255,247,.03);
+  mix-blend-mode: screen;
+  filter: blur(.7px);
+  animation: ambientRoll 2650ms linear forwards;
+}
+
+.flicker {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: rgba(210,255,250,.055);
+  mix-blend-mode: screen;
+  animation: ambientFlicker 360ms steps(5, end) forwards;
+}
+
+@keyframes ambientStaticBurst {
+  0% { opacity: 0; transform: translate3d(0, 0, 0); }
+  12% { opacity: .17; transform: translate3d(-1.2%, .7%, 0); }
+  28% { opacity: .07; transform: translate3d(.9%, -.4%, 0); }
+  44% { opacity: .13; transform: translate3d(-.5%, .4%, 0); }
+  61% { opacity: .045; transform: translate3d(.4%, -.8%, 0); }
+  78% { opacity: .10; transform: translate3d(-.7%, .2%, 0); }
+  100% { opacity: 0; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes ambientRoll {
+  0% { opacity: 0; transform: translateY(0); }
+  8% { opacity: .55; }
+  84% { opacity: .43; }
+  100% { opacity: 0; transform: translateY(450%); }
+}
+
+@keyframes ambientFlicker {
+  0%, 100% { opacity: 0; }
+  18% { opacity: .44; }
+  31% { opacity: .08; }
+  52% { opacity: .3; }
+  69% { opacity: .04; }
+  83% { opacity: .22; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .staticBurst,
+  .roll,
+  .flicker {
+    display: none;
+  }
+}
