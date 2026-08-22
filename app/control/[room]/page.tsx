@@ -1,12 +1,6 @@
-import { AICopilotDock } from "@/components/AICopilotDock";
 import { ControlPanel } from "@/components/ControlPanel";
 
 export default async function ControlPage({ params }: { params: Promise<{ room: string }> }) {
   const { room } = await params;
-  return (
-    <>
-      <ControlPanel room={room} />
-      <AICopilotDock room={room} />
-    </>
-  );
+  return <ControlPanel room={room} />;
 }
