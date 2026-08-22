@@ -5,6 +5,7 @@ import { createFriendComputerSupabase } from "@/lib/fc-supabase-server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const MAX_CITIZENS = 16;
 const CATEGORIES = ["GENERAL", "MISSION", "DISCOVERY", "ACCUSATION", "CLONE", "NPC", "EQUIPMENT", "SECRET_ORDER", "DEBRIEF"] as const;
 const VISIBILITIES = ["COMPUTER", "GM_ONLY"] as const;
 const IMPORTANCES = ["MINOR", "NORMAL", "IMPORTANT"] as const;
@@ -77,7 +78,7 @@ export async function POST(request: NextRequest) {
     if (!CATEGORIES.includes(category as (typeof CATEGORIES)[number])) return NextResponse.json({ error: "Invalid event category." }, { status: 400 });
     if (!VISIBILITIES.includes(visibility as (typeof VISIBILITIES)[number])) return NextResponse.json({ error: "Invalid event visibility." }, { status: 400 });
     if (!IMPORTANCES.includes(importance as (typeof IMPORTANCES)[number])) return NextResponse.json({ error: "Invalid event importance." }, { status: 400 });
-    if (seatValue !== null && (seatValue < 1 || seatValue > 4)) return NextResponse.json({ error: "Invalid citizen seat." }, { status: 400 });
+    if (seatValue !== null && (seatValue < 1 || seatValue > MAX_CITIZENS)) return NextResponse.json({ error: "Invalid citizen seat." }, { status: 400 });
     if (!title) return NextResponse.json({ error: "Event title is required." }, { status: 400 });
 
     const { data, error } = await supabase.rpc("fc_add_session_event", {
