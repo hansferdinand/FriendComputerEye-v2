@@ -13,8 +13,18 @@ const clientOptions = {
 const sender = createClient(url, key, clientOptions);
 const receiver = createClient(url, key, clientOptions);
 
-const senderChannel = sender.channel(topic, { config: { broadcast: { ack: true, self: false } } });
-const receiverChannel = receiver.channel(topic, { config: { broadcast: { ack: true, self: false } } });
+const senderChannel = sender.channel(topic, {
+  config: {
+    broadcast: { ack: true, self: false },
+    presence: { key: `display-${randomUUID()}` },
+  },
+});
+const receiverChannel = receiver.channel(topic, {
+  config: {
+    broadcast: { ack: true, self: false },
+    presence: { key: `control-${randomUUID()}` },
+  },
+});
 
 function subscribe(channel, label) {
   return new Promise((resolve, reject) => {
@@ -41,8 +51,34 @@ const received = new Promise((resolve, reject) => {
   });
 });
 
+const presenceVisible = new Promise((resolve, reject) => {
+  const timeout = setTimeout(() => reject(new Error("Realtime presence did not show both display and control")), 12_000);
+  receiverChannel.on("presence", { event: "sync" }, () => {
+    const state = receiverChannel.presenceState();
+    const roles = Object.values(state)
+      .flat()
+      .map((entry) => entry.role)
+      .filter(Boolean);
+
+    if (roles.includes("display") && roles.includes("control")) {
+      clearTimeout(timeout);
+      resolve(roles);
+    }
+  });
+});
+
 try {
   await Promise.all([subscribe(receiverChannel, "receiver"), subscribe(senderChannel, "sender")]);
+
+  const [displayTrack, controlTrack] = await Promise.all([
+    senderChannel.track({ role: "display", joinedAt: Date.now() }),
+    receiverChannel.track({ role: "control", joinedAt: Date.now() }),
+  ]);
+  if (displayTrack !== "ok" || controlTrack !== "ok") {
+    throw new Error(`Presence tracking failed: display=${displayTrack}, control=${controlTrack}`);
+  }
+
+  await presenceVisible;
 
   const response = await senderChannel.send({
     type: "broadcast",
@@ -56,7 +92,7 @@ try {
 
   if (response !== "ok") throw new Error(`Realtime send returned: ${response}`);
   await received;
-  console.log(`Supabase Realtime smoke test passed on ${topic}`);
+  console.log(`Supabase Realtime presence + command smoke test passed on ${topic}`);
 } finally {
   await Promise.allSettled([
     sender.removeChannel(senderChannel),

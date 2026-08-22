@@ -18,6 +18,8 @@ function normalizedRoomName(room: string) {
 }
 
 export type TransportKind = "connecting" | "realtime" | "broadcast" | "storage" | "none";
+export type PresenceRole = "display" | "control";
+export type RoomPresence = { displays: number; controls: number };
 
 export type CommandBus = {
   send: (command: FriendCommand) => void;
@@ -29,11 +31,14 @@ export function createCommandBus(
   room: string,
   onCommand?: (command: FriendCommand) => void,
   onTransportChange?: (transport: TransportKind) => void,
+  onPresenceChange?: (presence: RoomPresence) => void,
 ): CommandBus {
   const normalizedRoom = normalizedRoomName(room);
   const channelName = `${CHANNEL_PREFIX}:${normalizedRoom}`;
   const storageKey = `${channelName}:event`;
   const seen = new Set<string>();
+  const presenceKey = createId();
+  const role: PresenceRole = onCommand ? "display" : "control";
   let channel: BroadcastChannel | null = null;
   let storageAvailable = false;
   let remoteConnected = false;
@@ -49,6 +54,10 @@ export function createCommandBus(
 
   const emitTransport = () => {
     if (!closed) onTransportChange?.(currentTransport());
+  };
+
+  const emitNoPresence = () => {
+    if (!closed) onPresenceChange?.({ displays: 0, controls: 0 });
   };
 
   const remember = (id: string) => {
@@ -95,22 +104,49 @@ export function createCommandBus(
   if (storageAvailable) window.addEventListener("storage", onStorage);
 
   const supabase = getSupabaseClient();
-  const remoteChannel = supabase
+  let remoteChannel: ReturnType<typeof supabase.channel>;
+
+  const emitPresence = () => {
+    if (closed || !onPresenceChange) return;
+    const state = remoteChannel.presenceState();
+    let displays = 0;
+    let controls = 0;
+
+    for (const entries of Object.values(state)) {
+      for (const entry of entries as Array<Record<string, unknown>>) {
+        if (entry.role === "display") displays += 1;
+        if (entry.role === "control") controls += 1;
+      }
+    }
+
+    onPresenceChange({ displays, controls });
+  };
+
+  remoteChannel = supabase
     .channel(channelName, {
       config: {
         broadcast: { ack: true, self: false },
+        presence: { key: presenceKey },
       },
     })
     .on("broadcast", { event: REMOTE_EVENT }, (payload) => {
       receive(payload.payload as CommandEnvelope);
     })
+    .on("presence", { event: "sync" }, emitPresence)
     .subscribe((status) => {
       if (closed) return;
       remoteConnected = status === "SUBSCRIBED";
       emitTransport();
+
+      if (remoteConnected) {
+        void remoteChannel.track({ role, joinedAt: Date.now() });
+      } else {
+        emitNoPresence();
+      }
     });
 
   onTransportChange?.("connecting");
+  emitNoPresence();
 
   return {
     get transport() {
@@ -147,10 +183,12 @@ export function createCommandBus(
           if (result === "ok") return;
           remoteConnected = false;
           emitTransport();
+          emitNoPresence();
         })
         .catch(() => {
           remoteConnected = false;
           emitTransport();
+          emitNoPresence();
         });
     },
     close() {
