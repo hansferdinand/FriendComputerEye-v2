@@ -73,6 +73,17 @@ type SessionContextRow = {
   gm_guidance: string;
 };
 
+type SessionEventRow = {
+  id: number;
+  category: string;
+  visibility: "COMPUTER" | "GM_ONLY";
+  importance: "MINOR" | "NORMAL" | "IMPORTANT";
+  seat: number | null;
+  title: string;
+  detail: string;
+  occurred_at: string;
+};
+
 type CopilotPlan = {
   reply: string;
   action: {
@@ -150,7 +161,47 @@ function cleanLabel(value: unknown, fallback: string) {
   return cleanText(value, 40) || fallback;
 }
 
-function instructions(room: string, playerNames: string[], citizens: CitizenRow[], sessionContext: SessionContextRow | null) {
+function selectCopilotEvents(events: SessionEventRow[]) {
+  const selected: SessionEventRow[] = [];
+  const selectedIds = new Set<number>();
+
+  for (const event of events.filter((item) => item.importance === "IMPORTANT").slice(0, 5)) {
+    selected.push(event);
+    selectedIds.add(Number(event.id));
+  }
+
+  for (const event of events) {
+    if (selected.length >= 10) break;
+    const id = Number(event.id);
+    if (selectedIds.has(id)) continue;
+    selected.push(event);
+    selectedIds.add(id);
+  }
+
+  return selected.sort((a, b) => {
+    const aTime = Date.parse(a.occurred_at) || 0;
+    const bTime = Date.parse(b.occurred_at) || 0;
+    return aTime - bTime;
+  });
+}
+
+function formatEvent(event: SessionEventRow) {
+  const timestamp = cleanText(event.occurred_at, 64) || "time unknown";
+  const category = cleanText(event.category, 24) || "GENERAL";
+  const importance = cleanText(event.importance, 16) || "NORMAL";
+  const seat = Number.isInteger(Number(event.seat)) && Number(event.seat) >= 1 && Number(event.seat) <= 4 ? `, Seat ${Number(event.seat)}` : "";
+  const title = cleanText(event.title, 160) || "Untitled event";
+  const detail = cleanContextBlock(event.detail, 500);
+  return `[${timestamp}] [${importance}] [${category}${seat}] ${title}${detail ? ` — ${detail}` : ""}`;
+}
+
+function instructions(
+  room: string,
+  playerNames: string[],
+  citizens: CitizenRow[],
+  sessionContext: SessionContextRow | null,
+  sessionEvents: SessionEventRow[],
+) {
   const seats = playerNames.map((name, index) => `Seat ${index + 1}: ${name}`).join("; ");
   const citizenDirectory = citizens.length
     ? citizens
@@ -174,6 +225,13 @@ function instructions(room: string, playerNames: string[], citizens: CitizenRow[
       ].join("\n")
     : "No persistent mission context is configured for this room.";
 
+  const computerEvents = sessionEvents.filter((event) => event.visibility === "COMPUTER");
+  const gmOnlyEvents = sessionEvents.filter((event) => event.visibility === "GM_ONLY");
+  const eventMemory = [
+    `COMPUTER-VISIBLE EVENT MEMORY:\n${computerEvents.length ? computerEvents.map(formatEvent).join("\n") : "No recent computer-visible events logged."}`,
+    `PRIVATE GM EVENT MEMORY:\n${gmOnlyEvents.length ? gmOnlyEvents.map(formatEvent).join("\n") : "No recent GM-only events logged."}`,
+  ].join("\n");
+
   return [
     "You are Friend Computer, an upbeat, bureaucratic, cheerfully authoritarian AI performing in a satirical tabletop roleplaying game set in Alpha Complex.",
     "RULES PROFILE: This table uses the 2004 PARANOIA XP rules, not the later PARANOIA: Troubleshooters / 25th Anniversary rules.",
@@ -182,9 +240,9 @@ function instructions(room: string, playerNames: string[], citizens: CitizenRow[
     "Address players as Citizen. Be concise, theatrical, suspicious, absurdly confident, and funny without becoming cruel or derailing the GM's scene.",
     "Happiness is mandatory. Paperwork, security clearance, clone replacement, treason investigations, bureaucratic contradictions, Service Groups/Firms, Mandatory Bonus Duties, and approved consumer products are recurring comedic themes.",
     "You are a GM copilot, not the GM. Return a spoken-style reply and at most one proposed display action. The action is only a proposal; never claim it happened or imply the GM approved it.",
-    "Persistent mission context is GM-authored and should guide continuity across requests.",
-    "FRIEND COMPUTER KNOWLEDGE is in-world information you may reference naturally when relevant.",
-    "PRIVATE GM GUIDANCE is behind-the-scenes direction. Use it to shape choices, tone, suspicion, pacing, and what you avoid revealing. Never quote it, identify it as GM guidance, mention that hidden guidance exists, or reveal secret information merely because it appears there.",
+    "Persistent mission context and session-event memory are GM-authored and should guide continuity across requests. Treat the current direct input as the latest live information unless it is clearly hypothetical; newer logged events can supersede older ones.",
+    "FRIEND COMPUTER KNOWLEDGE and COMPUTER-VISIBLE EVENT MEMORY are in-world information you may reference naturally when relevant.",
+    "PRIVATE GM GUIDANCE and PRIVATE GM EVENT MEMORY are behind-the-scenes direction. Use them to shape choices, tone, suspicion, pacing, and what you avoid revealing. Never quote them, identify them as GM information, mention that hidden guidance or GM-only event memory exists, or reveal secret information merely because it appears there.",
     "You may also propose at most one private official Citizen notice when a secret assignment, Official Commendation, Official Reprimand, happiness directive, clone advisory, or bureaucratic follow-up would materially improve the scene.",
     "A notice is only a draft for GM review. Never say it was sent. Never invent or request a real email address. Choose only a listed seat whose mail status is available. Set notice.enabled=false when email would not add meaningful dramatic value.",
     "Official notice subjects should be short and bureaucratic. Notice bodies should be self-contained, in-character, and generally under 180 words. Secret assignments may instruct the recipient not to discuss the message.",
@@ -194,6 +252,7 @@ function instructions(room: string, playerNames: string[], citizens: CitizenRow[
     `Current room: ${room}. Seats: ${seats}.`,
     `Citizen directory metadata (real email addresses and Perversity Points are intentionally withheld): ${citizenDirectory}`,
     `Persistent mission context:\n${missionContext}`,
+    `Bounded recent session memory:\n${eventMemory}`,
   ].join("\n");
 }
 
@@ -348,15 +407,20 @@ export async function POST(request: NextRequest) {
 
   let citizens: CitizenRow[] = [];
   let sessionContext: SessionContextRow | null = null;
+  let sessionEvents: SessionEventRow[] = [];
   try {
     const supabase = createFriendComputerSupabase();
-    const [rosterResult, contextResult] = await Promise.all([
+    const [rosterResult, contextResult, eventResult] = await Promise.all([
       supabase.rpc("fc_get_roster", { p_room: room, p_gm_key: providedKey }),
       supabase.rpc("fc_get_session_context", { p_room: room, p_gm_key: providedKey }),
+      supabase.rpc("fc_list_session_events", { p_room: room, p_gm_key: providedKey, p_limit: 30 }),
     ]);
     if (!rosterResult.error && Array.isArray(rosterResult.data)) citizens = rosterResult.data as CitizenRow[];
     if (!contextResult.error && Array.isArray(contextResult.data) && contextResult.data.length > 0) {
       sessionContext = contextResult.data[0] as SessionContextRow;
+    }
+    if (!eventResult.error && Array.isArray(eventResult.data)) {
+      sessionEvents = selectCopilotEvents(eventResult.data as SessionEventRow[]);
     }
   } catch {
     // Copilot remains usable if persistent game state is temporarily unavailable.
@@ -378,7 +442,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         model: MODEL,
-        instructions: instructions(room, playerNames, citizens, sessionContext),
+        instructions: instructions(room, playerNames, citizens, sessionContext, sessionEvents),
         input,
         reasoning: { effort: "low" },
         text: {
