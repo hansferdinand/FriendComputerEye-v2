@@ -10,7 +10,12 @@ import {
   type FriendCommand,
   type ThreatLevel,
 } from "@/lib/friend-computer";
-import { createCommandBus, type CommandBus, type RoomPresence } from "@/lib/transport";
+import {
+  createCommandBus,
+  type CommandBus,
+  type CommandReceipt,
+  type RoomPresence,
+} from "@/lib/transport";
 
 const PLAYER_STORAGE_KEY = "friend-computer-v2:player-names:v1";
 
@@ -35,6 +40,8 @@ type QuickMacro = {
   stopsPatrol?: boolean;
   steps: MacroStep[];
 };
+
+type DeliveryState = "idle" | "pending" | "acked" | "unconfirmed";
 
 const QUICK_MACROS: QuickMacro[] = [
   {
@@ -101,8 +108,11 @@ const QUICK_MACROS: QuickMacro[] = [
 export function ControlPanel({ room }: { room: string }) {
   const busRef = useRef<CommandBus | null>(null);
   const macroTimersRef = useRef<number[]>([]);
+  const pendingReceiptRef = useRef<string | null>(null);
+  const receiptTimerRef = useRef<number | null>(null);
   const [transport, setTransport] = useState<CommandBus["transport"]>("connecting");
   const [presence, setPresence] = useState<RoomPresence>({ displays: 0, controls: 0 });
+  const [delivery, setDelivery] = useState<DeliveryState>("idle");
   const [activeMacro, setActiveMacro] = useState<string | null>(null);
   const [speech, setSpeech] = useState("");
   const [status, setStatus] = useState("");
@@ -130,16 +140,35 @@ export function ControlPanel({ room }: { room: string }) {
   }, [playerNames]);
 
   useEffect(() => {
-    const bus = createCommandBus(room, undefined, setTransport, setPresence);
+    const handleReceipt = (receipt: CommandReceipt) => {
+      if (receipt.id !== pendingReceiptRef.current) return;
+      pendingReceiptRef.current = null;
+      if (receiptTimerRef.current) window.clearTimeout(receiptTimerRef.current);
+      receiptTimerRef.current = null;
+      setDelivery("acked");
+    };
+
+    const bus = createCommandBus(room, undefined, setTransport, setPresence, handleReceipt);
     busRef.current = bus;
     return () => {
       bus.close();
       busRef.current = null;
+      pendingReceiptRef.current = null;
+      if (receiptTimerRef.current) window.clearTimeout(receiptTimerRef.current);
+      receiptTimerRef.current = null;
     };
   }, [room]);
 
   const send = useCallback((command: FriendCommand) => {
-    busRef.current?.send(command);
+    const id = busRef.current?.send(command);
+    if (!id) return;
+
+    pendingReceiptRef.current = id;
+    if (receiptTimerRef.current) window.clearTimeout(receiptTimerRef.current);
+    setDelivery("pending");
+    receiptTimerRef.current = window.setTimeout(() => {
+      if (pendingReceiptRef.current === id) setDelivery("unconfirmed");
+    }, 1600);
   }, []);
 
   const clearMacroTimers = useCallback(() => {
@@ -224,6 +253,27 @@ export function ControlPanel({ room }: { room: string }) {
         : "connection-pill--warning"
       : "connection-pill--muted";
 
+  const deliveryLabel =
+    transport !== "realtime"
+      ? "REMOTE ACK UNAVAILABLE"
+      : !displayOnline
+        ? "NO DISPLAY TO ACK"
+        : delivery === "pending"
+          ? "WAITING FOR DISPLAY ACK"
+          : delivery === "unconfirmed"
+            ? "COMMAND UNCONFIRMED"
+            : delivery === "acked"
+              ? "LAST COMMAND ACKNOWLEDGED"
+              : "ACK CHANNEL READY";
+  const deliveryClass =
+    transport !== "realtime"
+      ? "connection-pill--muted"
+      : !displayOnline || delivery === "pending"
+        ? "connection-pill--warning"
+        : delivery === "unconfirmed"
+          ? "connection-pill--bad"
+          : "";
+
   return (
     <main className="control-shell">
       <header className="control-header">
@@ -235,6 +285,7 @@ export function ControlPanel({ room }: { room: string }) {
           <Link className="display-link" href={`/display/${encodeURIComponent(room)}`} target="_blank">OPEN DISPLAY ↗</Link>
           <div className={`connection-pill ${transport === "none" ? "connection-pill--bad" : ""}`}><i /> {transportLabel} · {roomLabel}</div>
           <div className={`connection-pill ${presenceClass}`}><i /> {presenceLabel}</div>
+          <div className={`connection-pill ${deliveryClass}`}><i /> {deliveryLabel}</div>
         </div>
       </header>
 
