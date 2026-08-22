@@ -1,0 +1,10 @@
+.panel--macros { grid-column: 1 / -1; }
+.macro-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 7px; }
+.connection-pill--warning { color: #ffd36a; border-color: #765d25; }
+.connection-pill--warning i { background: #ffc247; box-shadow: 0 0 8px #ffc247; }
+.connection-pill--muted { color: #799296; border-color: #294247; }
+.connection-pill--muted i { background: #64777a; box-shadow: none; }
+
+@media (max-width: 760px) {
+  .macro-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
