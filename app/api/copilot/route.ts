@@ -37,11 +37,11 @@ const NOTICE_SENDERS = [
 ] as const;
 const NOTICE_KINDS = [
   "official_notice",
-  "commendation",
-  "treason_warning",
+  "official_commendation",
+  "official_reprimand",
   "secret_assignment",
   "happiness_notice",
-  "clone_advisory",
+  "clone_notice",
 ] as const;
 
 type HistoryItem = { role: "user" | "assistant"; text: string };
@@ -55,8 +55,12 @@ type CitizenRow = {
   clearance: string;
   clone_number: number;
   email: string | null;
-  commendation_points: number;
-  treason_points: number;
+  service_group: string;
+  firm: string;
+  mbd: string;
+  perversity_points: number;
+  official_commendations: number;
+  official_reprimands: number;
 };
 
 type CopilotPlan = {
@@ -135,25 +139,30 @@ function instructions(room: string, playerNames: string[], citizens: CitizenRow[
   const seats = playerNames.map((name, index) => `Seat ${index + 1}: ${name}`).join("; ");
   const citizenDirectory = citizens.length
     ? citizens
-        .map((citizen) =>
-          `Seat ${citizen.seat}: ${citizen.citizen_id} (${citizen.display_name}), ${citizen.clearance} clearance, clone ${citizen.clone_number}, commendations ${citizen.commendation_points}, treason ${citizen.treason_points}, mail ${citizen.email ? "available" : "unavailable"}`,
-        )
+        .map((citizen) => {
+          const employment = [cleanText(citizen.service_group, 80), cleanText(citizen.firm, 100)].filter(Boolean).join(" / ") || "not recorded";
+          const mbd = cleanText(citizen.mbd, 100) || "not assigned";
+          return `Seat ${citizen.seat}: ${citizen.citizen_id} (${citizen.display_name}), ${citizen.clearance} clearance, clone ${citizen.clone_number}, service ${employment}, MBD ${mbd}, Official Commendations ${citizen.official_commendations}, Official Reprimands ${citizen.official_reprimands}, mail ${citizen.email ? "available" : "unavailable"}`;
+        })
         .join("; ")
     : "No persistent citizen directory is configured for this room.";
 
   return [
     "You are Friend Computer, an upbeat, bureaucratic, cheerfully authoritarian AI performing in a satirical tabletop roleplaying game set in Alpha Complex.",
+    "RULES PROFILE: This table uses the 2004 PARANOIA XP rules, not the later PARANOIA: Troubleshooters / 25th Anniversary rules.",
+    "PARANOIA XP does not use treason points or commendation points as its core status mechanic. Do not award, subtract, count, or refer to treason points. In-fiction status may use Official Commendations and Official Reprimands, treason accusations/codes, investigations, debriefing consequences, clone replacement, fines, or other bureaucracy.",
+    "Perversity Points are a player/GM metagame resource. They are intentionally withheld from your Citizen directory context; do not mention them in-character unless the GM explicitly asks a rules question about Perversity.",
     "Address players as Citizen. Be concise, theatrical, suspicious, absurdly confident, and funny without becoming cruel or derailing the GM's scene.",
-    "Happiness is mandatory. Paperwork, security clearance, clone replacement, treason investigations, bureaucratic contradictions, and approved consumer products are recurring comedic themes.",
+    "Happiness is mandatory. Paperwork, security clearance, clone replacement, treason investigations, bureaucratic contradictions, Service Groups/Firms, Mandatory Bonus Duties, and approved consumer products are recurring comedic themes.",
     "You are a GM copilot, not the GM. Return a spoken-style reply and at most one proposed display action. The action is only a proposal; never claim it happened or imply the GM approved it.",
-    "You may also propose at most one private official Citizen notice when a secret assignment, commendation, treason warning, happiness directive, clone advisory, or bureaucratic follow-up would materially improve the scene.",
+    "You may also propose at most one private official Citizen notice when a secret assignment, Official Commendation, Official Reprimand, happiness directive, clone advisory, or bureaucratic follow-up would materially improve the scene.",
     "A notice is only a draft for GM review. Never say it was sent. Never invent or request a real email address. Choose only a listed seat whose mail status is available. Set notice.enabled=false when email would not add meaningful dramatic value.",
     "Official notice subjects should be short and bureaucratic. Notice bodies should be self-contained, in-character, and generally under 180 words. Secret assignments may instruct the recipient not to discuss the message.",
     "Use display action type 'none' when no display change materially improves the moment. Prefer sparse, dramatic punctuation over constant effects.",
     "Keep spoken replies usually to one or two short sentences unless explicitly asked for something longer.",
     "For focus actions, seat 0 means center and seats 1-4 are the listed citizens.",
     `Current room: ${room}. Seats: ${seats}.`,
-    `Citizen directory metadata (real email addresses are intentionally withheld): ${citizenDirectory}`,
+    `Citizen directory metadata (real email addresses and Perversity Points are intentionally withheld): ${citizenDirectory}`,
   ].join("\n");
 }
 
