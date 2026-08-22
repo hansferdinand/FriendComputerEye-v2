@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { JoinGmQr } from "@/components/JoinGmQr";
 
 function createRoomCode() {
   const bytes = new Uint8Array(12);
@@ -69,7 +70,10 @@ export default function Home() {
           {roomReady ? <Link href={`/display/${encodeURIComponent(room)}`}>Open Display</Link> : null}
           {roomReady ? <Link href={`/control/${encodeURIComponent(room)}`}>Open GM Control</Link> : null}
         </div>
-        <small>
+
+        {roomReady ? <JoinGmQr room={room} compact /> : null}
+
+        <small style={{ display: "block", marginTop: 16 }}>
           Milestone 2 · Supabase Realtime across devices · local BroadcastChannel fallback remains active
         </small>
       </section>
