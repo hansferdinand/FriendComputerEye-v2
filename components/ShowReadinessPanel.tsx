@@ -100,6 +100,7 @@ export function ShowReadinessPanel({ room }: { room: string }) {
   const routeTargets = useMemo(() => [
     { label: "JOIN CHECKPOINT", path: `/join/${encodeURIComponent(room)}` },
     { label: "MANUAL CONTROLLER", path: `/control/${encodeURIComponent(room)}` },
+    { label: "MISSION CONTEXT", path: `/session/${encodeURIComponent(room)}` },
     { label: "AI COPILOT", path: `/copilot/${encodeURIComponent(room)}` },
     { label: "CITIZEN COMMS", path: `/communications/${encodeURIComponent(room)}` },
     { label: "PROJECTOR DISPLAY", path: `/display/${encodeURIComponent(room)}` },
@@ -192,6 +193,7 @@ export function ShowReadinessPanel({ room }: { room: string }) {
         </div>
         <div className="control-header-actions">
           <Link className="display-link" href={`/control/${encodeURIComponent(room)}`}>MANUAL CONTROLS</Link>
+          <Link className="display-link" href={`/session/${encodeURIComponent(room)}`}>MISSION CONTEXT</Link>
           <Link className="display-link" href={`/copilot/${encodeURIComponent(room)}`}>AI COPILOT</Link>
           <Link className="display-link" href={`/communications/${encodeURIComponent(room)}`}>COMMUNICATIONS</Link>
           <Link className="display-link" href={`/display/${encodeURIComponent(room)}`} target="_blank">DISPLAY ↗</Link>
