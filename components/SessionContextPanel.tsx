@@ -119,6 +119,7 @@ export function SessionContextPanel({ room }: { room: string }) {
           <h1>Mission Context</h1>
         </div>
         <div className="control-header-actions">
+          <Link className="display-link" href={`/mission/${encodeURIComponent(room)}`}>MISSION DIRECTOR</Link>
           <Link className="display-link" href={`/readiness/${encodeURIComponent(room)}`}>SHOW READINESS</Link>
           <Link className="display-link" href={`/log/${encodeURIComponent(room)}`}>SESSION LOG</Link>
           <Link className="display-link" href={`/control/${encodeURIComponent(room)}`}>MANUAL CONTROLS</Link>
@@ -146,7 +147,7 @@ export function SessionContextPanel({ room }: { room: string }) {
           {statusMessage ? <div style={{ marginTop: 10, color: "#87f6fb", fontSize: 12 }}>{statusMessage}</div> : null}
           {error ? <div style={{ marginTop: 10, color: "#ff8d86", fontSize: 12 }}>{error}</div> : null}
           <small style={{ display: "block", marginTop: 10, color: "#6e9499", lineHeight: 1.45 }}>
-            Context is stored in the private Friend Computer Supabase tables and retrieved only through the GM-key-gated server API. Use Session Log for chronological events that happen during play.
+            Context is stored in the private Friend Computer Supabase tables and retrieved only through the GM-key-gated server API. Mission Director can preload this page from the one-shot's current scene; use Session Log for chronological events that happen during play.
           </small>
         </section>
 
@@ -221,6 +222,7 @@ export function SessionContextPanel({ room }: { room: string }) {
                 <button type="button" className="primary-action" disabled={busy} onClick={() => void saveContext()}>
                   {busy ? "SAVING…" : "SAVE SESSION CONTEXT"}
                 </button>
+                <Link className="display-link" href={`/mission/${encodeURIComponent(room)}`}>OPEN MISSION DIRECTOR</Link>
                 <Link className="display-link" href={`/log/${encodeURIComponent(room)}`}>OPEN SESSION LOG</Link>
                 <Link className="display-link" href={`/copilot/${encodeURIComponent(room)}`}>OPEN COPILOT</Link>
               </div>
