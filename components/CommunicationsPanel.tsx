@@ -12,8 +12,12 @@ type Citizen = {
   clearance: (typeof CLEARANCES)[number];
   cloneNumber: number;
   email: string;
-  commendationPoints: number;
-  treasonPoints: number;
+  serviceGroup: string;
+  firm: string;
+  mbd: string;
+  perversityPoints: number;
+  officialCommendations: number;
+  officialReprimands: number;
 };
 
 type Notice = {
@@ -27,8 +31,9 @@ type Notice = {
   responded_at: string | null;
 };
 
-type NoticeKind = "commendation" | "treason_warning" | "secret_assignment" | "happiness_notice" | "clone_notice" | "custom";
+type NoticeKind = "official_commendation" | "official_reprimand" | "secret_assignment" | "happiness_notice" | "clone_notice" | "custom";
 type SenderPersona = "friend_computer" | "citizen_services" | "internal_security" | "happiness_office" | "termination_services";
+type StatusKind = "perversity" | "commendation" | "reprimand";
 
 const SENDER_LABELS: Record<SenderPersona, string> = {
   friend_computer: "Friend Computer",
@@ -38,16 +43,24 @@ const SENDER_LABELS: Record<SenderPersona, string> = {
   termination_services: "Termination Services",
 };
 
+const SENDER_EMAILS: Record<SenderPersona, string> = {
+  friend_computer: "friendcomputer@alphacomplex.space",
+  citizen_services: "citizen-services@alphacomplex.space",
+  internal_security: "internal-security@alphacomplex.space",
+  happiness_office: "happiness-office@alphacomplex.space",
+  termination_services: "termination-services@alphacomplex.space",
+};
+
 const PRESETS: Record<Exclude<NoticeKind, "custom">, { sender: SenderPersona; subject: string; body: string }> = {
-  commendation: {
+  official_commendation: {
     sender: "friend_computer",
-    subject: "MANDATORY COMMENDATION RECORDED",
-    body: "Citizen, Friend Computer has observed conduct marginally exceeding minimum loyalty expectations. A commendation has been entered into your record. Please continue deserving it until further notice.",
+    subject: "OFFICIAL COMMENDATION RECORDED",
+    body: "Citizen, Friend Computer has observed conduct marginally exceeding minimum loyalty expectations. An Official Commendation has been entered into your record. Please continue deserving it until further notice.",
   },
-  treason_warning: {
+  official_reprimand: {
     sender: "internal_security",
-    subject: "PRELIMINARY TREASON WARNING",
-    body: "Citizen, certain recent activities have generated an entirely routine quantity of suspicion. This is not an accusation. It is an opportunity to demonstrate innocence before the accusation becomes necessary.",
+    subject: "OFFICIAL REPRIMAND RECORDED",
+    body: "Citizen, recent conduct has been assessed as insufficiently reassuring. An Official Reprimand has been entered into your record. This is not punishment. It is an administratively convenient opportunity to improve before debriefing.",
   },
   secret_assignment: {
     sender: "internal_security",
@@ -74,8 +87,12 @@ function defaultCitizen(seat: number): Citizen {
     clearance: "RED",
     cloneNumber: 1,
     email: "",
-    commendationPoints: 0,
-    treasonPoints: 0,
+    serviceGroup: "",
+    firm: "",
+    mbd: "",
+    perversityPoints: 25,
+    officialCommendations: 0,
+    officialReprimands: 0,
   };
 }
 
@@ -129,12 +146,16 @@ export function CommunicationsPanel({ room }: { room: string }) {
           clearance: CLEARANCES.includes(clearance) ? clearance : "RED",
           cloneNumber: Number(row.clone_number ?? 1),
           email: String(row.email ?? ""),
-          commendationPoints: Number(row.commendation_points ?? 0),
-          treasonPoints: Number(row.treason_points ?? 0),
+          serviceGroup: String(row.service_group ?? ""),
+          firm: String(row.firm ?? ""),
+          mbd: String(row.mbd ?? ""),
+          perversityPoints: Number(row.perversity_points ?? 25),
+          officialCommendations: Number(row.official_commendations ?? 0),
+          officialReprimands: Number(row.official_reprimands ?? 0),
         };
       }));
       setUnlocked(true);
-      setStatus("CITIZEN DIRECTORY UNLOCKED");
+      setStatus("PARANOIA XP CITIZEN DIRECTORY UNLOCKED");
       await loadNotices();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to unlock citizen directory.");
@@ -161,22 +182,24 @@ export function CommunicationsPanel({ room }: { room: string }) {
     }
   };
 
-  const adjustPoints = async (seat: number, type: "commendation" | "treason", delta: number) => {
+  const adjustStatus = async (seat: number, type: StatusKind, delta: number) => {
     try {
       await authorizedFetch({
-        action: "adjust_points",
+        action: "adjust_xp_status",
         room,
         seat,
+        perversityDelta: type === "perversity" ? delta : 0,
         commendationDelta: type === "commendation" ? delta : 0,
-        treasonDelta: type === "treason" ? delta : 0,
+        reprimandDelta: type === "reprimand" ? delta : 0,
       });
       const citizen = citizens.find((item) => item.seat === seat);
       if (citizen) updateCitizen(seat, {
-        commendationPoints: citizen.commendationPoints + (type === "commendation" ? delta : 0),
-        treasonPoints: citizen.treasonPoints + (type === "treason" ? delta : 0),
+        perversityPoints: Math.max(0, citizen.perversityPoints + (type === "perversity" ? delta : 0)),
+        officialCommendations: Math.max(0, citizen.officialCommendations + (type === "commendation" ? delta : 0)),
+        officialReprimands: Math.max(0, citizen.officialReprimands + (type === "reprimand" ? delta : 0)),
       });
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Unable to update points.");
+      setError(reason instanceof Error ? reason.message : "Unable to update XP citizen status.");
     }
   };
 
@@ -209,7 +232,7 @@ export function CommunicationsPanel({ room }: { room: string }) {
   return (
     <main className="control-shell">
       <header className="control-header">
-        <div><span className="control-eyebrow">ALPHA COMPLEX BUREAUCRATIC NETWORK</span><h1>Citizen Communications</h1></div>
+        <div><span className="control-eyebrow">PARANOIA XP · ALPHA COMPLEX BUREAUCRATIC NETWORK</span><h1>Citizen Communications</h1></div>
         <div className="control-header-actions">
           <Link className="display-link" href={`/control/${encodeURIComponent(room)}`}>MANUAL CONTROLS</Link>
           <Link className="display-link" href={`/copilot/${encodeURIComponent(room)}`}>AI COPILOT</Link>
@@ -226,7 +249,7 @@ export function CommunicationsPanel({ room }: { room: string }) {
           </div>
           {status ? <div style={{ marginTop: 10, color: "#87f6fb", fontSize: 12 }}>{status}</div> : null}
           {error ? <div style={{ marginTop: 10, color: "#ff8d86", fontSize: 12 }}>{error}</div> : null}
-          <small style={{ display: "block", marginTop: 10, color: "#6e9499", lineHeight: 1.45 }}>Real email addresses are encrypted in Supabase with the GM passphrase. They are never included in Friend Computer AI prompts.</small>
+          <small style={{ display: "block", marginTop: 10, color: "#6e9499", lineHeight: 1.45 }}>XP rules profile: Perversity is GM/meta-game state; Official Commendations and Reprimands are in-fiction record status. Real email addresses remain encrypted and are never included in Friend Computer AI prompts.</small>
         </section>
 
         {unlocked ? citizens.map((citizen) => (
@@ -239,10 +262,14 @@ export function CommunicationsPanel({ room }: { room: string }) {
                 <select value={citizen.clearance} onChange={(event) => updateCitizen(citizen.seat, { clearance: event.target.value as Citizen["clearance"] })}>{CLEARANCES.map((level) => <option value={level} key={level}>{level}</option>)}</select>
                 <input type="number" min={1} max={99} value={citizen.cloneNumber} onChange={(event) => updateCitizen(citizen.seat, { cloneNumber: Number(event.target.value) || 1 })} aria-label="Clone number" />
               </div>
+              <input value={citizen.serviceGroup} onChange={(event) => updateCitizen(citizen.seat, { serviceGroup: event.target.value })} placeholder="Service Group" />
+              <input value={citizen.firm} onChange={(event) => updateCitizen(citizen.seat, { firm: event.target.value })} placeholder="Service Firm" />
+              <input value={citizen.mbd} onChange={(event) => updateCitizen(citizen.seat, { mbd: event.target.value })} placeholder="Mandatory Bonus Duty (MBD)" />
               <input type="email" value={citizen.email} onChange={(event) => updateCitizen(citizen.seat, { email: event.target.value })} placeholder="Real player email (encrypted)" />
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                <div style={{ border: "1px solid #1e4347", padding: 8, fontSize: 12 }}>COMMENDATIONS <strong>{citizen.commendationPoints}</strong><div className="button-row" style={{ marginTop: 6 }}><button type="button" onClick={() => void adjustPoints(citizen.seat, "commendation", -1)}>−</button><button type="button" onClick={() => void adjustPoints(citizen.seat, "commendation", 1)}>+</button></div></div>
-                <div style={{ border: "1px solid #1e4347", padding: 8, fontSize: 12 }}>TREASON <strong>{citizen.treasonPoints}</strong><div className="button-row" style={{ marginTop: 6 }}><button type="button" onClick={() => void adjustPoints(citizen.seat, "treason", -1)}>−</button><button type="button" className="danger" onClick={() => void adjustPoints(citizen.seat, "treason", 1)}>+</button></div></div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 8 }}>
+                <div style={{ border: "1px solid #1e4347", padding: 8, fontSize: 12 }}>PERVERSITY <strong>{citizen.perversityPoints}</strong><div className="button-row" style={{ marginTop: 6 }}><button type="button" onClick={() => void adjustStatus(citizen.seat, "perversity", -1)}>−</button><button type="button" onClick={() => void adjustStatus(citizen.seat, "perversity", 1)}>+</button></div></div>
+                <div style={{ border: "1px solid #1e4347", padding: 8, fontSize: 12 }}>OFFICIAL COMMENDATIONS <strong>{citizen.officialCommendations}</strong><div className="button-row" style={{ marginTop: 6 }}><button type="button" onClick={() => void adjustStatus(citizen.seat, "commendation", -1)}>−</button><button type="button" onClick={() => void adjustStatus(citizen.seat, "commendation", 1)}>+</button></div></div>
+                <div style={{ border: "1px solid #1e4347", padding: 8, fontSize: 12 }}>OFFICIAL REPRIMANDS <strong>{citizen.officialReprimands}</strong><div className="button-row" style={{ marginTop: 6 }}><button type="button" onClick={() => void adjustStatus(citizen.seat, "reprimand", -1)}>−</button><button type="button" className="danger" onClick={() => void adjustStatus(citizen.seat, "reprimand", 1)}>+</button></div></div>
               </div>
               <button type="button" onClick={() => void saveCitizen(citizen)} disabled={busy}>SAVE CITIZEN</button>
             </div>
@@ -255,7 +282,7 @@ export function CommunicationsPanel({ room }: { room: string }) {
             <div style={{ display: "grid", gap: 10 }}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 8 }}>
                 <select value={recipientSeat} onChange={(event) => setRecipientSeat(Number(event.target.value))}>{citizens.map((citizen) => <option value={citizen.seat} key={citizen.seat}>Seat {citizen.seat} · {citizen.citizenId}{citizen.email ? "" : " · NO EMAIL"}</option>)}</select>
-                <select value={noticeKind} onChange={(event) => applyPreset(event.target.value as NoticeKind)}><option value="commendation">Commendation</option><option value="treason_warning">Treason Warning</option><option value="secret_assignment">Secret Assignment</option><option value="happiness_notice">Happiness Notice</option><option value="clone_notice">Clone Advisory</option><option value="custom">Custom Notice</option></select>
+                <select value={noticeKind} onChange={(event) => applyPreset(event.target.value as NoticeKind)}><option value="official_commendation">Official Commendation</option><option value="official_reprimand">Official Reprimand</option><option value="secret_assignment">Secret Assignment</option><option value="happiness_notice">Happiness Notice</option><option value="clone_notice">Clone Advisory</option><option value="custom">Custom Notice</option></select>
                 <select value={senderPersona} onChange={(event) => setSenderPersona(event.target.value as SenderPersona)}>{Object.entries(SENDER_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
               </div>
               <input value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Subject" maxLength={160} />
@@ -264,7 +291,7 @@ export function CommunicationsPanel({ room }: { room: string }) {
                 <button type="button" className={includeResponse ? "is-active" : ""} onClick={() => setIncludeResponse((value) => !value)}>ACK / DENY LINKS {includeResponse ? "ON" : "OFF"}</button>
                 <button type="button" className="primary-action" disabled={busy || !recipient.email || !subject.trim() || !body.trim()} onClick={() => void sendNotice()}>{busy ? "TRANSMITTING…" : "SEND OFFICIAL NOTICE"}</button>
               </div>
-              <small style={{ color: "#6e9499" }}>From: {SENDER_LABELS[senderPersona]} &lt;{senderPersona.replaceAll("_", "-")}@alphacomplex.space&gt; · To: {recipient.email || "NO EMAIL ON FILE"}</small>
+              <small style={{ color: "#6e9499" }}>From: {SENDER_LABELS[senderPersona]} &lt;{SENDER_EMAILS[senderPersona]}&gt; · To: {recipient.email || "NO EMAIL ON FILE"}</small>
             </div>
           </section>
         ) : null}
