@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 
+const MAX_CITIZENS = 16;
 const CATEGORIES = ["GENERAL", "MISSION", "DISCOVERY", "ACCUSATION", "CLONE", "NPC", "EQUIPMENT", "SECRET_ORDER", "DEBRIEF"] as const;
 const VISIBILITIES = ["COMPUTER", "GM_ONLY"] as const;
 const IMPORTANCES = ["MINOR", "NORMAL", "IMPORTANT"] as const;
@@ -146,8 +147,10 @@ export function SessionEventLogPanel({ room }: { room: string }) {
           <h1>Session Log</h1>
         </div>
         <div className="control-header-actions">
+          <Link className="display-link" href={`/mission/${encodeURIComponent(room)}`}>MISSION DIRECTOR</Link>
           <Link className="display-link" href={`/session/${encodeURIComponent(room)}`}>MISSION CONTEXT</Link>
           <Link className="display-link" href={`/readiness/${encodeURIComponent(room)}`}>SHOW READINESS</Link>
+          <Link className="display-link" href={`/communications/${encodeURIComponent(room)}`}>COMMUNICATIONS</Link>
           <Link className="display-link" href={`/copilot/${encodeURIComponent(room)}`}>AI COPILOT</Link>
           <Link className="display-link" href={`/control/${encodeURIComponent(room)}`}>MANUAL CONTROLS</Link>
         </div>
@@ -174,7 +177,7 @@ export function SessionEventLogPanel({ room }: { room: string }) {
                   <select value={category} onChange={(event) => setCategory(event.target.value as Category)}>{CATEGORIES.map((item) => <option value={item} key={item}>{CATEGORY_LABELS[item]}</option>)}</select>
                   <select value={visibility} onChange={(event) => setVisibility(event.target.value as Visibility)}><option value="COMPUTER">Computer-visible</option><option value="GM_ONLY">GM only</option></select>
                   <select value={importance} onChange={(event) => setImportance(event.target.value as Importance)}>{IMPORTANCES.map((item) => <option value={item} key={item}>{item}</option>)}</select>
-                  <select value={seat ?? ""} onChange={(event) => setSeat(event.target.value ? Number(event.target.value) : null)}><option value="">No specific Citizen</option><option value="1">Seat 1</option><option value="2">Seat 2</option><option value="3">Seat 3</option><option value="4">Seat 4</option></select>
+                  <select value={seat ?? ""} onChange={(event) => setSeat(event.target.value ? Number(event.target.value) : null)}><option value="">No specific Citizen</option>{Array.from({ length: MAX_CITIZENS }, (_, index) => <option key={index + 1} value={index + 1}>Seat {index + 1}</option>)}</select>
                 </div>
                 <input value={title} maxLength={160} onChange={(event) => setTitle(event.target.value)} placeholder="What happened?" />
                 <textarea value={detail} maxLength={1200} onChange={(event) => setDetail(event.target.value)} placeholder="Optional details, consequences, names, clues, or private GM notes…" style={{ minHeight: 110 }} />
