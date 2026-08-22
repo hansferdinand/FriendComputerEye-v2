@@ -3,11 +3,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 
+const STABLE_JOIN_ORIGIN = "https://friend-computer-eye-v2.vercel.app";
+
+function joinOrigin() {
+  const { hostname, origin } = window.location;
+  const isLocal = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  return isLocal ? origin : STABLE_JOIN_ORIGIN;
+}
+
 export function JoinGmQr({ room, compact = false }: { room: string; compact?: boolean }) {
   const [origin, setOrigin] = useState("");
 
   useEffect(() => {
-    setOrigin(window.location.origin);
+    setOrigin(joinOrigin());
   }, []);
 
   const controlUrl = useMemo(
