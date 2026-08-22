@@ -243,8 +243,8 @@ export function FriendEye({
             <ellipse cx="456" cy="302" rx="27" ry="16" fill="white" opacity="0.9" />
             <ellipse cx="478" cy="322" rx="10" ry="7" fill="white" opacity="0.55" />
           </g>
-          <path className="eyelid eyelid--top" d={lids.top} />
-          <path className="eyelid eyelid--bottom" d={lids.bottom} />
+          <path className="eyelid eyelid--top" d={lids.top} style={{ transition: "none" }} />
+          <path className="eyelid eyelid--bottom" d={lids.bottom} style={{ transition: "none" }} />
         </g>
         <ellipse cx="500" cy="350" rx="354" ry="240" fill="none" stroke="#101b1c" strokeWidth="26" opacity="0.88" />
       </svg>
