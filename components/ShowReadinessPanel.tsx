@@ -48,9 +48,11 @@ function detectCapabilities(): BrowserCapabilities {
     localStorage = false;
   }
 
+  const runtimeNavigator = navigator as Navigator & { mediaDevices?: MediaDevices };
+
   return {
     online: navigator.onLine,
-    microphoneRecording: Boolean(navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== "undefined"),
+    microphoneRecording: Boolean(runtimeNavigator.mediaDevices && typeof MediaRecorder !== "undefined"),
     speechSynthesis: "speechSynthesis" in window,
     fullscreen: typeof document.documentElement.requestFullscreen === "function",
     wakeLock: "wakeLock" in navigator,
