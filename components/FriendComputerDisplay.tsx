@@ -11,6 +11,7 @@ import {
   type FriendCommand,
   type FriendComputerState,
 } from "@/lib/friend-computer";
+import type { DisplayAudioRole } from "@/lib/display-config";
 import { createCommandBus } from "@/lib/transport";
 
 type Overlay =
@@ -50,7 +51,15 @@ function pickVoice() {
   return voices.find((voice) => voice.lang.toLowerCase().startsWith("en")) ?? voices[0] ?? null;
 }
 
-export function FriendComputerDisplay({ room }: { room: string }) {
+export function FriendComputerDisplay({
+  room,
+  displayName,
+  audioRole,
+}: {
+  room: string;
+  displayName: string;
+  audioRole: DisplayAudioRole;
+}) {
   const [state, setState] = useState<FriendComputerState>(INITIAL_STATE);
   const [overlay, setOverlay] = useState<Overlay>({ kind: "none" });
   const [blinkNonce, setBlinkNonce] = useState(0);
@@ -66,6 +75,7 @@ export function FriendComputerDisplay({ room }: { room: string }) {
   const startAudioRef = useRef<HTMLAudioElement | null>(null);
   const humAudioRef = useRef<HTMLAudioElement | null>(null);
   const wakeLockRef = useRef<ScreenWakeLockSentinel | null>(null);
+  const audioEnabled = audioRole === "primary";
 
   useEffect(() => {
     const start = new Audio("/audio/crt-start.mp3");
@@ -94,6 +104,17 @@ export function FriendComputerDisplay({ room }: { room: string }) {
       wakeLockRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (audioEnabled) return;
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    setSpeaking(false);
+    startAudioRef.current?.pause();
+    if (humAudioRef.current) {
+      humAudioRef.current.pause();
+      humAudioRef.current.volume = 0;
+    }
+  }, [audioEnabled]);
 
   const acquireWakeLock = useCallback(async () => {
     if (document.visibilityState !== "visible") return;
@@ -134,7 +155,7 @@ export function FriendComputerDisplay({ room }: { room: string }) {
   }, []);
 
   const speak = useCallback((text: string) => {
-    if (!text.trim() || !("speechSynthesis" in window)) return;
+    if (!audioEnabled || !text.trim() || !("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text.trim());
     const voice = pickVoice();
@@ -153,12 +174,12 @@ export function FriendComputerDisplay({ room }: { room: string }) {
     };
     const restoreAudio = () => {
       setSpeaking(false);
-      if (humAudioRef.current && audioReady) humAudioRef.current.volume = 0.14;
+      if (humAudioRef.current && audioReady && audioEnabled) humAudioRef.current.volume = 0.14;
     };
     utterance.onend = restoreAudio;
     utterance.onerror = restoreAudio;
     window.speechSynthesis.speak(utterance);
-  }, [audioReady]);
+  }, [audioEnabled, audioReady]);
 
   const applyCommand = useCallback(
     (command: FriendCommand) => {
@@ -242,9 +263,16 @@ export function FriendComputerDisplay({ room }: { room: string }) {
   );
 
   useEffect(() => {
-    const bus = createCommandBus(room, applyCommand);
+    const bus = createCommandBus(
+      room,
+      applyCommand,
+      undefined,
+      undefined,
+      undefined,
+      { displayName, audioRole },
+    );
     return () => bus.close();
-  }, [room, applyCommand]);
+  }, [room, applyCommand, displayName, audioRole]);
 
   useEffect(() => {
     if (!state.patrol) return;
@@ -348,6 +376,11 @@ export function FriendComputerDisplay({ room }: { room: string }) {
       : document.documentElement.requestFullscreen().catch(() => undefined);
     const wakeLockPromise = acquireWakeLock();
 
+    if (!audioEnabled) {
+      await Promise.allSettled([fullscreenPromise, wakeLockPromise]);
+      return;
+    }
+
     const start = startAudioRef.current;
     const hum = humAudioRef.current;
     if (!start || !hum) {
@@ -359,9 +392,9 @@ export function FriendComputerDisplay({ room }: { room: string }) {
     hum.volume = 0;
     await Promise.allSettled([start.play(), hum.play(), fullscreenPromise, wakeLockPromise]);
     window.setTimeout(() => {
-      if (humAudioRef.current) humAudioRef.current.volume = 0.14;
+      if (humAudioRef.current && audioEnabled) humAudioRef.current.volume = 0.14;
     }, 400);
-  }, [acquireWakeLock]);
+  }, [acquireWakeLock, audioEnabled]);
 
   const currentAd = overlay.kind === "ad" ? ADVERTISEMENTS[overlay.index] : null;
 
@@ -428,12 +461,12 @@ export function FriendComputerDisplay({ room }: { room: string }) {
       {!audioReady ? (
         <button type="button" className="audio-unlock" onClick={unlockAudio}>
           INITIALIZE FRIEND COMPUTER
-          <small>click once to enable CRT audio, fullscreen, and observation</small>
+          <small>{audioEnabled ? "click once to enable primary audio, fullscreen, and observation" : "visual-only display · click once for fullscreen and observation"}</small>
         </button>
       ) : null}
 
       <div className="display-debug">
-        ROOM {room.toUpperCase()} · 1–4 TARGET · A ANGRY · S SQUINT · I INTERROGATE · B AD · C CLONE · D DEGAUSS · F FULLSCREEN · G GLITCH · P PATROL · SPACE BLINK · ESC RESET
+        {displayName.toUpperCase()} · {audioEnabled ? "PRIMARY AUDIO" : "VISUAL ONLY"} · ROOM {room.toUpperCase()} · M SETTINGS · Q JOIN QR · F FULLSCREEN · ESC RESET
       </div>
     </main>
   );

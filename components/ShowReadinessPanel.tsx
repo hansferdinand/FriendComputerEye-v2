@@ -75,7 +75,7 @@ function StatusRow({ label, state, muted = false }: { label: string; state: Chec
 export function ShowReadinessPanel({ room }: { room: string }) {
   const [gmKey, setGmKey] = useState("");
   const [transport, setTransport] = useState<CommandBus["transport"]>("connecting");
-  const [presence, setPresence] = useState<RoomPresence>({ displays: 0, controls: 0 });
+  const [presence, setPresence] = useState<RoomPresence>({ displays: 0, controls: 0, displayClients: [] });
   const [capabilities, setCapabilities] = useState<BrowserCapabilities | null>(null);
   const [server, setServer] = useState<ServerReadiness | null>(null);
   const [routes, setRoutes] = useState<RouteState[]>([]);
@@ -162,6 +162,15 @@ export function ShowReadinessPanel({ room }: { room: string }) {
   }, [checkRoutes, gmKey, room]);
 
   const displayOnline = transport === "realtime" && presence.displays > 0;
+  const displayClients = presence.displayClients ?? [];
+  const audioMasters = displayClients.filter((display) => display.audioRole === "primary");
+  const audioTopologyReady = displayOnline && audioMasters.length === 1;
+  const audioDetail = audioMasters.length === 1
+    ? `${audioMasters[0].name} is PRIMARY AUDIO`
+    : audioMasters.length === 0
+      ? "No PRIMARY AUDIO display detected"
+      : `${audioMasters.length} PRIMARY AUDIO displays detected — choose exactly one`;
+
   const criticalStates: Array<boolean | undefined> = server ? [
     server.configuration?.gmAuthorization,
     server.configuration?.openAI,
@@ -171,6 +180,7 @@ export function ShowReadinessPanel({ room }: { room: string }) {
     server.mailDns?.spf?.ok,
     server.mailDns?.dkim?.ok,
     displayOnline,
+    audioTopologyReady,
     ...routes.map((route) => route.ok),
   ] : [];
   const checked = Boolean(server && routes.length === routeTargets.length);
@@ -235,7 +245,16 @@ export function ShowReadinessPanel({ room }: { room: string }) {
           <div className="panel-heading"><span>NET</span><h2>Room Transport</h2></div>
           <StatusRow label="SUPABASE REALTIME" state={{ ok: transport === "realtime", detail: `Transport: ${transport}` }} />
           <StatusRow label="DISPLAY PRESENCE" state={{ ok: displayOnline, detail: displayOnline ? `${presence.displays} display(s) online` : "No Realtime display detected" }} />
+          <StatusRow label="AUDIO MASTER" state={{ ok: audioTopologyReady, detail: audioDetail }} />
           <StatusRow label="CONTROL PRESENCE" state={{ ok: presence.controls > 0, detail: `${presence.controls} control/readiness client(s) detected` }} muted />
+          <div style={{ marginTop: 12, display: "grid", gap: 6 }}>
+            {displayClients.length ? displayClients.map((display, index) => (
+              <div key={`${display.key}-${index}`} style={{ display: "flex", justifyContent: "space-between", gap: 10, border: "1px solid #17373a", padding: "7px 8px", fontSize: 11 }}>
+                <span style={{ color: "#a8d7da" }}>{display.name}</span>
+                <strong style={{ color: display.audioRole === "primary" ? "#87f6fb" : "#6e9499" }}>{display.audioRole === "primary" ? "PRIMARY AUDIO" : "VISUAL ONLY"}</strong>
+              </div>
+            )) : <small style={{ color: "#6e9499" }}>Named displays will appear here after they load the current display client.</small>}
+          </div>
         </section>
 
         <section className="panel">
