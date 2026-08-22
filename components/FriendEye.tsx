@@ -11,6 +11,7 @@ type Props = {
   blinkNonce: number;
   doubleBlinkNonce: number;
   visible: boolean;
+  danger: boolean;
 };
 
 type LidGeometry = {
@@ -148,6 +149,7 @@ export function FriendEye({
   blinkNonce,
   doubleBlinkNonce,
   visible,
+  danger,
 }: Props) {
   const [micro, setMicro] = useState({ x: 0, y: 0 });
   const [pupilBreath, setPupilBreath] = useState(1);
@@ -204,6 +206,7 @@ export function FriendEye({
   const irisCompression = 1 - Math.min(Math.abs(gazeX) * 0.13, 0.13);
   const expressionPupil = expression === "terrified" ? 0.58 : expression === "drugged" ? 1.46 : 1;
   const pupilScale = expressionPupil * pupilBreath;
+  const dangerOpacity = danger ? 1 : 0;
 
   return (
     <div
@@ -220,7 +223,13 @@ export function FriendEye({
             <stop offset="68%" stopColor="#d7e5e8" />
             <stop offset="100%" stopColor="#708489" />
           </radialGradient>
-          <radialGradient id="iris" cx="42%" cy="38%" r="65%">
+          <radialGradient id="iris-blue" cx="42%" cy="38%" r="65%">
+            <stop offset="0%" stopColor="#9ce8ff" />
+            <stop offset="42%" stopColor="#2d9eea" />
+            <stop offset="80%" stopColor="#07518c" />
+            <stop offset="100%" stopColor="#001a35" />
+          </radialGradient>
+          <radialGradient id="iris-red" cx="42%" cy="38%" r="65%">
             <stop offset="0%" stopColor="#ff745f" />
             <stop offset="45%" stopColor="#df2018" />
             <stop offset="82%" stopColor="#6f0503" />
@@ -243,8 +252,25 @@ export function FriendEye({
               transform: `translate(${irisX - 500}px, ${irisY - 350}px) scaleX(${irisCompression})`,
             }}
           >
-            <circle cx="500" cy="350" r="150" fill="#310000" opacity="0.45" filter="url(#eye-glow)" />
-            <circle cx="500" cy="350" r="136" fill="url(#iris)" stroke="#ff4d35" strokeWidth="5" />
+            <circle cx="500" cy="350" r="150" fill="#003e68" opacity="0.48" filter="url(#eye-glow)" />
+            <circle
+              cx="500"
+              cy="350"
+              r="150"
+              fill="#310000"
+              filter="url(#eye-glow)"
+              style={{ opacity: dangerOpacity * 0.48, transition: "opacity 320ms ease" }}
+            />
+            <circle cx="500" cy="350" r="136" fill="url(#iris-blue)" stroke="#62cfff" strokeWidth="5" />
+            <circle
+              cx="500"
+              cy="350"
+              r="136"
+              fill="url(#iris-red)"
+              stroke="#ff4d35"
+              strokeWidth="5"
+              style={{ opacity: dangerOpacity, transition: "opacity 320ms ease" }}
+            />
             <circle cx="500" cy="350" r={56 * pupilScale} fill="#020000" className="pupil" />
             <ellipse cx="456" cy="302" rx="27" ry="16" fill="white" opacity="0.9" />
             <ellipse cx="478" cy="322" rx="10" ry="7" fill="white" opacity="0.55" />
