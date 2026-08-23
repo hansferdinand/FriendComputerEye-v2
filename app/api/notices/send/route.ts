@@ -40,6 +40,10 @@ function cleanText(value: unknown, maxLength: number) {
   return value.replace(/\r/g, "").trim().slice(0, maxLength);
 }
 
+function emailLooksValid(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
 function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, (char) => ({
     "&": "&amp;",
@@ -125,6 +129,21 @@ export async function POST(request: NextRequest) {
   }
 
   const supabase = createFriendComputerSupabase();
+  const { data: sessionAccepted, error: sessionError } = await supabase.rpc("fc_ensure_session", {
+    p_room: room,
+    p_gm_key: providedKey,
+  });
+  if (sessionError) {
+    console.error("Notice room authorization failed", sessionError.message);
+    return NextResponse.json({ error: "Unable to authorize the Alpha Complex mail room." }, { status: 502 });
+  }
+  if (sessionAccepted !== true) {
+    return NextResponse.json(
+      { error: "This room is bound to a different GM passphrase. Reopen the current Join Menu or use the passphrase that created this room." },
+      { status: 409 },
+    );
+  }
+
   const { data: rosterData, error: rosterError } = await supabase.rpc("fc_get_roster_private", {
     p_room: room,
     p_gm_key: providedKey,
@@ -135,8 +154,9 @@ export async function POST(request: NextRequest) {
   }
 
   const citizen = ((rosterData ?? []) as CitizenRow[]).find((row) => Number(row.seat) === seat);
-  if (!citizen) return NextResponse.json({ error: "That citizen is not in the directory." }, { status: 404 });
-  if (!citizen.email) return NextResponse.json({ error: "That citizen has no email address on file." }, { status: 400 });
+  if (!citizen) return NextResponse.json({ error: "That citizen is not saved in the directory. Save the Citizen before sending mail." }, { status: 404 });
+  if (!citizen.email) return NextResponse.json({ error: "That citizen has no saved email address." }, { status: 400 });
+  if (!emailLooksValid(citizen.email)) return NextResponse.json({ error: "That citizen's saved email address is invalid. Correct and save it before sending." }, { status: 400 });
 
   const isSociety = senderPersona === "secret_society";
   const society = cleanText(citizen.secret_society, 100);
