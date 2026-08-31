@@ -22,7 +22,7 @@ export function MissionDirectorPanel({ room }: { room: string }) {
   const [statusMessage, setStatusMessage] = useState("");
   const [error, setError] = useState("");
   const [transport, setTransport] = useState<CommandBus["transport"]>("connecting");
-  const [presence, setPresence] = useState<RoomPresence>({ displays: 0, controls: 0 });
+  const [presence, setPresence] = useState<RoomPresence>({ displays: 0, controls: 0, displayClients: [] });
   const [cueAck, setCueAck] = useState("NO CUE SENT");
   const [packageId, setPackageId] = useState<DirectorPackageId>(PARANOIA_XP_ONE_SHOT.id);
   const lastCommandId = useRef<string | null>(null);
@@ -169,6 +169,7 @@ export function MissionDirectorPanel({ room }: { room: string }) {
   }, [sendDirectorCommand]);
 
   const displayOnline = transport === "realtime" && presence.displays > 0;
+  const primaryAudioDisplayCount = presence.displayClients?.filter((display) => display.audioRole === "primary").length ?? 0;
 
   return (
     <main className="control-shell">
@@ -224,7 +225,13 @@ export function MissionDirectorPanel({ room }: { room: string }) {
         </section>
 
         {unlocked && packageId === SATIATE_SCENARIO.id ? (
-          <ScenarioDirectorPanel room={room} gmKey={gmKey} displayCount={presence.displays} sendCommand={sendDirectorCommand} />
+          <ScenarioDirectorPanel
+            room={room}
+            gmKey={gmKey}
+            displayCount={presence.displays}
+            primaryAudioDisplayCount={primaryAudioDisplayCount}
+            sendCommand={sendDirectorCommand}
+          />
         ) : null}
 
         {unlocked && packageId === PARANOIA_XP_ONE_SHOT.id ? PARANOIA_XP_ONE_SHOT.scenes.map((scene) => {

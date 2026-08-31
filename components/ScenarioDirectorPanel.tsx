@@ -29,6 +29,7 @@ type Props = {
   room: string;
   gmKey: string;
   displayCount: number;
+  primaryAudioDisplayCount: number;
   sendCommand: (command: FriendCommand) => void;
 };
 
@@ -46,7 +47,7 @@ function isSnapshot(value: unknown): value is ScenarioRuntimeSnapshot {
   return item.version === 1 && item.scenarioId === SATIATE_SCENARIO.id && typeof item.remainingMs === "number";
 }
 
-export function ScenarioDirectorPanel({ room, gmKey, displayCount, sendCommand }: Props) {
+export function ScenarioDirectorPanel({ room, gmKey, displayCount, primaryAudioDisplayCount, sendCommand }: Props) {
   const [snapshot, setSnapshot] = useState<ScenarioRuntimeSnapshot>(() => createSatiateSnapshot());
   const [ready, setReady] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -251,8 +252,10 @@ export function ScenarioDirectorPanel({ room, gmKey, displayCount, sendCommand }
     commit((current) => ({ ...current, displayEnabled: true, presentation: { kind: "announcement", eyebrow: "FRIEND COMPUTER ANNOUNCEMENT", headline: text.toUpperCase(), detail: "SAT-7 COUNTDOWN CONTINUES" } }));
     sendCommand({ type: "set-status", text: text.toUpperCase() });
     sendCommand({ type: "speak", text });
-    setMessage("FRIEND COMPUTER ANNOUNCEMENT SENT");
-  }, [commit, sendCommand]);
+    setMessage(primaryAudioDisplayCount > 0
+      ? "TEXT-TO-SPEECH SENT TO PRIMARY AUDIO DISPLAY"
+      : "TEXT-TO-SPEECH SENT · NO PRIMARY AUDIO DISPLAY DETECTED");
+  }, [commit, primaryAudioDisplayCount, sendCommand]);
 
   const dueReminders = useMemo(
     () => SATIATE_REMINDERS.filter((reminder) => remainingMs <= reminder.atMs && !dismissed.includes(reminder.id)),
@@ -342,8 +345,13 @@ export function ScenarioDirectorPanel({ room, gmKey, displayCount, sendCommand }
       </section>
 
       <section className="panel scenario-wide-panel">
-        <div className="panel-heading"><span>FC</span><h2>Scenario Message Presets</h2></div>
-        <div className="scenario-message-grid">{SATIATE_MESSAGE_PRESETS.map((text) => <button type="button" key={text} onClick={() => speakPreset(text)}>{text}</button>)}</div>
+        <div className="panel-heading"><span>FC</span><h2>Scenario Message Presets · Text to Speech</h2></div>
+        <small className="scenario-muted">
+          {primaryAudioDisplayCount > 0
+            ? `● PRIMARY AUDIO READY (${primaryAudioDisplayCount}) · Each preset appears on screen and is spoken aloud.`
+            : "× NO PRIMARY AUDIO DISPLAY · On the Friend Computer display, press M and choose PRIMARY AUDIO to hear these presets."}
+        </small>
+        <div className="scenario-message-grid">{SATIATE_MESSAGE_PRESETS.map((text) => <button type="button" key={text} title={`Speak: ${text}`} onClick={() => speakPreset(text)}>{text}</button>)}</div>
       </section>
 
       <section className="panel scenario-wide-panel">
