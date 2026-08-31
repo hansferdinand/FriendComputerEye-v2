@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AmbientIdleEffects } from "@/components/AmbientIdleEffects";
 import { FriendEye } from "@/components/FriendEye";
+import { LoadingTimerDisplay } from "@/components/LoadingTimerDisplay";
 import { ProjectorStateOverlay } from "@/components/ProjectorStateOverlay";
 import { ScenarioDisplay } from "@/components/ScenarioDisplay";
 import {
@@ -16,6 +17,11 @@ import {
   type ProjectorState,
 } from "@/lib/friend-computer";
 import type { DisplayAudioRole } from "@/lib/display-config";
+import {
+  isLoadingTimerState,
+  loadingTimerStorageKey,
+  type LoadingTimerState,
+} from "@/lib/loading-timer";
 import { createCommandBus } from "@/lib/transport";
 import type { ScenarioRuntimeSnapshot } from "@/lib/scenario-runtime";
 
@@ -76,6 +82,8 @@ export function FriendComputerDisplay({
   const [speaking, setSpeaking] = useState(false);
   const [scenario, setScenario] = useState<ScenarioRuntimeSnapshot | null>(null);
   const [projectorState, setProjectorState] = useState<ProjectorState | null>(null);
+  const [loadingTimer, setLoadingTimer] = useState<LoadingTimerState | null>(null);
+  const [loadedLoadingTimerRoom, setLoadedLoadingTimerRoom] = useState<string | null>(null);
   const overlayTimerRef = useRef<number | null>(null);
   const statusLockUntilRef = useRef(0);
   const lastDirectedGazeRef = useRef(0);
@@ -111,6 +119,28 @@ export function FriendComputerDisplay({
       wakeLockRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(loadingTimerStorageKey(room));
+      const parsed = raw ? JSON.parse(raw) as unknown : null;
+      setLoadingTimer(isLoadingTimerState(parsed) ? parsed : null);
+    } catch {
+      setLoadingTimer(null);
+    }
+    setLoadedLoadingTimerRoom(room);
+  }, [room]);
+
+  useEffect(() => {
+    if (loadedLoadingTimerRoom !== room) return;
+    try {
+      const key = loadingTimerStorageKey(room);
+      if (loadingTimer) window.localStorage.setItem(key, JSON.stringify(loadingTimer));
+      else window.localStorage.removeItem(key);
+    } catch {
+      // The live command remains usable when local recovery is unavailable.
+    }
+  }, [loadedLoadingTimerRoom, loadingTimer, room]);
 
   useEffect(() => {
     if (audioEnabled) return;
@@ -204,6 +234,12 @@ export function FriendComputerDisplay({
           break;
         case "clear-projector-state":
           setProjectorState(null);
+          break;
+        case "set-loading-timer":
+          setLoadingTimer(command.timer);
+          break;
+        case "clear-loading-timer":
+          setLoadingTimer(null);
           break;
         case "set-gaze":
           lastDirectedGazeRef.current = Date.now();
@@ -426,7 +462,7 @@ export function FriendComputerDisplay({
   const scenarioRevealing = scenario?.zeroTriggeredAt !== null;
 
   return (
-    <main className={`display-shell ${speaking ? "display-shell--speaking" : ""} ${audioReady ? "display-shell--active" : ""} ${scenario ? "display-shell--scenario" : ""}`}>
+    <main className={`display-shell ${speaking ? "display-shell--speaking" : ""} ${audioReady ? "display-shell--active" : ""} ${scenario ? "display-shell--scenario" : ""} ${loadingTimer ? "display-shell--loading" : ""}`}>
       <section className={`crt-frame glitch-${glitchNonce % 2}`}>
         <header className="terminal-header">
           <span>AlphaOS v2.0.0-FRIENDSHIP</span>
@@ -446,6 +482,7 @@ export function FriendComputerDisplay({
             ambient={ambientActive}
           />
           <AmbientIdleEffects active={ambientActive} />
+          {loadingTimer ? <LoadingTimerDisplay timer={loadingTimer} /> : null}
           {scenario ? <ScenarioDisplay snapshot={scenario} /> : null}
 
           {overlay.kind === "error" ? (

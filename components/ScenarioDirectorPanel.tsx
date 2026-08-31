@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FriendCommand } from "@/lib/friend-computer";
 import {
   SATIATE_DURATION_MS,
@@ -57,6 +57,7 @@ export function ScenarioDirectorPanel({ room, gmKey, displayCount, primaryAudioD
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const autoContextSyncedRoomRef = useRef<string | null>(null);
 
   useEffect(() => {
     try {
@@ -138,7 +139,7 @@ export function ScenarioDirectorPanel({ room, gmKey, displayCount, primaryAudioD
     });
   }, [authorizedFetch, room]);
 
-  const activateContext = useCallback(async () => {
+  const activateContext = useCallback(async (logActivation = true) => {
     setBusy(true);
     setError("");
     try {
@@ -153,14 +154,24 @@ export function ScenarioDirectorPanel({ room, gmKey, displayCount, primaryAudioD
         publicContext: SATIATE_SCENARIO.publicContext,
         gmGuidance: SATIATE_SCENARIO.gmGuidance,
       });
-      await logEvent("90 Minutes to Treason activated", "SATIATE-7 was placed under Troubleshooter investigation. The countdown was configured but not started automatically.");
-      setMessage("MISSION CONTEXT SYNCHRONIZED · TIMER REMAINS ON HOLD");
+      if (logActivation) {
+        await logEvent("90 Minutes to Treason activated", "SATIATE-7 was placed under Troubleshooter investigation. The countdown was configured but not started automatically.");
+      }
+      setMessage(logActivation
+        ? "MISSION ACTIVATION LOGGED · CONTEXT SYNCHRONIZED · TIMER REMAINS ON HOLD"
+        : "90 MINUTES TO TREASON CONTEXT ACTIVE · TIMER REMAINS ON HOLD");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to synchronize mission context.");
     } finally {
       setBusy(false);
     }
   }, [authorizedFetch, logEvent, room]);
+
+  useEffect(() => {
+    if (!ready || !gmKey.trim() || autoContextSyncedRoomRef.current === room) return;
+    autoContextSyncedRoomRef.current = room;
+    void activateContext(false);
+  }, [activateContext, gmKey, ready, room]);
 
   const start = useCallback(() => {
     if (remainingMs <= 0) return;
@@ -307,7 +318,7 @@ export function ScenarioDirectorPanel({ room, gmKey, displayCount, primaryAudioD
           <button type="button" onClick={() => commit((current) => ({ ...current, displayEnabled: true }))}>SHOW SCENARIO</button>
           <button type="button" onClick={() => commit((current) => ({ ...current, displayEnabled: false }))}>RETURN TO FRIEND COMPUTER</button>
         </div>
-        <button type="button" disabled={busy} onClick={() => void activateContext()}>{busy ? "SYNCHRONIZING…" : "SYNC MISSION CONTEXT + LOG ACTIVATION"}</button>
+        <button type="button" disabled={busy} onClick={() => void activateContext()}>{busy ? "SYNCHRONIZING…" : "LOG MISSION ACTIVATION + RESYNC CONTEXT"}</button>
         {message ? <div className="scenario-feedback">{message}</div> : null}
         {error ? <div className="scenario-feedback scenario-feedback--error">{error}</div> : null}
       </section>

@@ -66,6 +66,7 @@ The repository now includes the later show-running systems as well as the origin
 - text and realtime AI Copilot surfaces with GM-controlled projector actions
 - persistent Mission Context and Session Event Log
 - Mission Director packages and projector cues
+- Manual Controls loading bar with minute, hour, day, week, and year countdown labels
 - citizen roster, notices, secret-society mail, invitations, and Resend delivery
 - show-readiness diagnostics
 
@@ -80,6 +81,7 @@ Open `/mission/[room]` and select a mission package. Existing general Friend Com
 The `90-minutes-to-treason` package adds a show-safe SATIATE-7 runtime:
 
 - paused-by-default `01:30:00` real-time countdown
+- automatic persistent Mission Context activation when the package is selected
 - start, pause/resume, reset, add/remove, manual time, and manual zero controls
 - GM-only, dismissible pacing reminders
 - Friend Computer, R&D, treason, and device-warning presentation presets

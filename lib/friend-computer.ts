@@ -1,4 +1,5 @@
 import type { ScenarioRuntimeSnapshot } from "@/lib/scenario-runtime";
+import type { LoadingTimerState } from "@/lib/loading-timer";
 
 export const THREAT_LEVELS = [
   "INFRARED",
@@ -57,6 +58,8 @@ export type FriendCommand =
   | { type: "effect"; effect: FriendEffect }
   | { type: "show-projector-state"; state: ProjectorState }
   | { type: "clear-projector-state" }
+  | { type: "set-loading-timer"; timer: LoadingTimerState }
+  | { type: "clear-loading-timer" }
   | { type: "set-scenario"; snapshot: ScenarioRuntimeSnapshot }
   | { type: "exit-scenario" };
 

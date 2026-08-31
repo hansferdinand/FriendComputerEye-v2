@@ -16,6 +16,15 @@ import {
   type CommandReceipt,
   type RoomPresence,
 } from "@/lib/transport";
+import {
+  DEFAULT_LOADING_LABEL,
+  LOADING_TIME_UNITS,
+  createLoadingTimer,
+  isLoadingTimerState,
+  loadingTimerStorageKey,
+  type LoadingTimerState,
+  type LoadingTimeUnit,
+} from "@/lib/loading-timer";
 
 const PLAYER_STORAGE_KEY = "friend-computer-v2:player-names:v1";
 
@@ -118,7 +127,18 @@ export function ControlPanel({ room }: { room: string }) {
   const [status, setStatus] = useState("");
   const [patrol, setPatrol] = useState(false);
   const [playerNames, setPlayerNames] = useState<string[]>(() => PLAYER_PRESETS.map((p) => p.label));
+  const [loadingLabel, setLoadingLabel] = useState(DEFAULT_LOADING_LABEL);
+  const [loadingAmount, setLoadingAmount] = useState("10");
+  const [loadingUnit, setLoadingUnit] = useState<LoadingTimeUnit>("years");
+  const [activeLoadingTimer, setActiveLoadingTimer] = useState<LoadingTimerState | null>(null);
+  const [loadedLoadingTimerRoom, setLoadedLoadingTimerRoom] = useState<string | null>(null);
+  const [loadingError, setLoadingError] = useState("");
   const roomLabel = useMemo(() => room.toUpperCase(), [room]);
+  const displayPresenceSignature = useMemo(
+    () => `${presence.displays}:${presence.displayClients?.map((display) => display.key).sort().join(",") ?? ""}`,
+    [presence.displayClients, presence.displays],
+  );
+  const loadingSyncRef = useRef("");
 
   useEffect(() => {
     try {
@@ -138,6 +158,35 @@ export function ControlPanel({ room }: { room: string }) {
       // Player labels are a convenience, never a show-critical dependency.
     }
   }, [playerNames]);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(loadingTimerStorageKey(room));
+      const parsed = raw ? JSON.parse(raw) as unknown : null;
+      if (isLoadingTimerState(parsed)) {
+        setActiveLoadingTimer(parsed);
+        setLoadingLabel(parsed.label);
+        setLoadingAmount(String(parsed.amount));
+        setLoadingUnit(parsed.unit);
+      } else {
+        setActiveLoadingTimer(null);
+      }
+    } catch {
+      setActiveLoadingTimer(null);
+    }
+    setLoadedLoadingTimerRoom(room);
+  }, [room]);
+
+  useEffect(() => {
+    if (loadedLoadingTimerRoom !== room) return;
+    try {
+      const key = loadingTimerStorageKey(room);
+      if (activeLoadingTimer) window.localStorage.setItem(key, JSON.stringify(activeLoadingTimer));
+      else window.localStorage.removeItem(key);
+    } catch {
+      // Realtime delivery remains available when local recovery is blocked.
+    }
+  }, [activeLoadingTimer, loadedLoadingTimerRoom, room]);
 
   useEffect(() => {
     const handleReceipt = (receipt: CommandReceipt) => {
@@ -170,6 +219,14 @@ export function ControlPanel({ room }: { room: string }) {
       if (pendingReceiptRef.current === id) setDelivery("unconfirmed");
     }, 1600);
   }, []);
+
+  useEffect(() => {
+    if (!activeLoadingTimer || presence.displays === 0) return;
+    const syncKey = `${activeLoadingTimer.startedAt}:${displayPresenceSignature}`;
+    if (loadingSyncRef.current === syncKey) return;
+    loadingSyncRef.current = syncKey;
+    busRef.current?.send({ type: "set-loading-timer", timer: activeLoadingTimer });
+  }, [activeLoadingTimer, displayPresenceSignature, presence.displays]);
 
   const clearMacroTimers = useCallback(() => {
     for (const timer of macroTimersRef.current) window.clearTimeout(timer);
@@ -208,6 +265,26 @@ export function ControlPanel({ room }: { room: string }) {
   function speak() {
     if (!speech.trim()) return;
     send({ type: "speak", text: speech.trim() });
+  }
+
+  function startLoadingTimer() {
+    const amount = Number(loadingAmount);
+    if (!Number.isFinite(amount) || amount < 0.01 || amount > 10_000) {
+      setLoadingError("Enter a duration from 0.01 through 10,000.");
+      return;
+    }
+    const timer = createLoadingTimer(loadingLabel, amount, loadingUnit);
+    setLoadingError("");
+    setActiveLoadingTimer(timer);
+    loadingSyncRef.current = `${timer.startedAt}:${displayPresenceSignature}`;
+    send({ type: "set-loading-timer", timer });
+  }
+
+  function clearLoadingTimer() {
+    setLoadingError("");
+    setActiveLoadingTimer(null);
+    loadingSyncRef.current = "";
+    send({ type: "clear-loading-timer" });
   }
 
   useEffect(() => {
@@ -411,6 +488,50 @@ export function ControlPanel({ room }: { room: string }) {
             <button type="button" onClick={() => send({ type: "set-status", text: status || "COMPUTER IS YOUR FRIEND" })}>SEND STATUS</button>
             <button type="button" className="danger" onClick={() => { setPatrol(false); send({ type: "effect", effect: "reset" }); }}>RESET DISPLAY</button>
           </div>
+        </section>
+
+        <section className="panel panel--loading-timer">
+          <div className="panel-heading"><span>07</span><h2>Loading Timer</h2></div>
+          <div className="loading-timer-controls">
+            <label>
+              <span>DISPLAY LABEL</span>
+              <input
+                value={loadingLabel}
+                maxLength={120}
+                onChange={(event) => setLoadingLabel(event.target.value)}
+                placeholder={DEFAULT_LOADING_LABEL}
+              />
+            </label>
+            <label>
+              <span>DURATION</span>
+              <input
+                type="number"
+                min="0.01"
+                max="10000"
+                step="0.01"
+                value={loadingAmount}
+                onChange={(event) => setLoadingAmount(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>TIME LABEL</span>
+              <select value={loadingUnit} onChange={(event) => setLoadingUnit(event.target.value as LoadingTimeUnit)}>
+                {LOADING_TIME_UNITS.map((unit) => <option key={unit} value={unit}>{unit.toUpperCase()}</option>)}
+              </select>
+            </label>
+          </div>
+          <div className="button-row">
+            <button type="button" className="primary-action" onClick={startLoadingTimer}>
+              {activeLoadingTimer ? "RESTART / UPDATE LOADING BAR" : "SHOW LOADING BAR"}
+            </button>
+            <button type="button" className="danger" onClick={clearLoadingTimer}>CANCEL / REMOVE</button>
+          </div>
+          {loadingError ? <div className="loading-timer-control-error">{loadingError}</div> : null}
+          <small className="loading-timer-control-status">
+            {activeLoadingTimer
+              ? `ACTIVE · ${activeLoadingTimer.amount} ${activeLoadingTimer.unit.toUpperCase()} · ${activeLoadingTimer.label}`
+              : "No loading bar is active. Starting one does not affect the SATIATE-7 countdown."}
+          </small>
         </section>
       </div>
     </main>

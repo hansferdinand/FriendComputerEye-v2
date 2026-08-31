@@ -128,6 +128,30 @@ button { touch-action: manipulation; }
   text-shadow: 0 0 12px #24dcd6;
   z-index: 8;
 }
+.display-shell--loading:not(.display-shell--scenario) .eye-stage { inset: 3% 8% 24%; }
+.display-shell--loading:not(.display-shell--scenario) .status-line { bottom: 1.2%; font-size: clamp(8px,.95vw,14px); opacity: .72; }
+.loading-timer {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  bottom: 7%;
+  z-index: 14;
+  display: grid;
+  gap: clamp(5px,.7vw,10px);
+  color: #aafcff;
+  pointer-events: none;
+  text-shadow: 0 0 10px rgba(72,246,255,.34);
+}
+.display-shell--scenario .loading-timer { bottom: 21%; }
+.loading-timer-heading { display: flex; justify-content: space-between; align-items: end; gap: 20px; font-size: clamp(8px,1vw,14px); letter-spacing: .14em; }
+.loading-timer-heading span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.loading-timer-heading strong { color: #eaffff; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.loading-timer-track { height: clamp(20px,2.8vw,42px); padding: clamp(3px,.35vw,5px); border: 1px solid #48f6ff; background: rgba(0,7,8,.9); box-shadow: 0 0 24px rgba(72,246,255,.14), inset 0 0 14px rgba(72,246,255,.05); }
+.loading-timer-track i { display: block; height: 100%; background: repeating-linear-gradient(90deg,#48f6ff 0 22px,#168990 22px 26px); box-shadow: 0 0 14px rgba(72,246,255,.72); transition: width 900ms linear; }
+.loading-timer-scale { display: flex; justify-content: space-between; color: #578c90; font-size: clamp(6px,.65vw,9px); letter-spacing: .12em; }
+.loading-timer--complete .loading-timer-track { border-color: #78ff9e; }
+.loading-timer--complete .loading-timer-track i { background: repeating-linear-gradient(90deg,#78ff9e 0 22px,#2c9f58 22px 26px); box-shadow: 0 0 14px rgba(120,255,158,.72); }
+.loading-timer--complete .loading-timer-heading strong { color: #9dffb8; }
 .overlay {
   position: absolute;
   inset: 0;
@@ -237,6 +261,7 @@ button { touch-action: manipulation; }
 .panel { grid-column: span 6; background: linear-gradient(180deg, rgba(15,24,27,.96), rgba(5,10,12,.96)); border: 1px solid #1e4347; padding: 16px; box-shadow: inset 0 0 40px rgba(20,227,236,.02); }
 .panel--players, .panel--speech { grid-column: span 8; }
 .panel--threat, .panel--status { grid-column: span 4; }
+.panel--loading-timer { grid-column: 1 / -1; }
 .panel-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
 .panel-heading span { display: grid; place-items: center; width: 27px; height: 27px; border: 1px solid #1f6970; color: var(--cyan); font-size: 10px; }
 .panel-heading h2 { margin: 0; font-size: 14px; text-transform: uppercase; letter-spacing: .13em; color: #aeecef; }
@@ -250,6 +275,10 @@ button { touch-action: manipulation; }
 .panel button:active { transform: translateY(1px); }
 .panel button.is-active { color: #001012; background: var(--cyan); border-color: var(--cyan); }
 .panel select { width: 100%; border: 1px solid #25555a; background: #020607; color: #d9fbfd; outline: none; padding: 11px 12px; font: inherit; }
+.loading-timer-controls { display: grid; grid-template-columns: minmax(260px,1.6fr) minmax(130px,.45fr) minmax(150px,.55fr); gap: 9px; }
+.loading-timer-controls label { display: grid; gap: 6px; color: #6e9499; font-size: 9px; letter-spacing: .12em; }
+.loading-timer-control-status { display: block; margin-top: 10px; color: #6e9499; font-size: 10px; line-height: 1.45; }
+.loading-timer-control-error { margin-top: 9px; color: #ff8d86; font-size: 11px; }
 .button-row { display: flex; gap: 8px; margin-top: 9px; }
 .button-row > * { flex: 1; }
 .button-row--tight button { padding-inline: 6px; }
@@ -290,6 +319,9 @@ button { touch-action: manipulation; }
   .player-grid { grid-template-columns: 1fr; }
   .action-grid--three { grid-template-columns: repeat(2, 1fr); }
   .threat-grid { grid-template-columns: repeat(3, 1fr); }
+  .loading-timer-controls { grid-template-columns: 1fr; }
+  .loading-timer-heading { align-items: start; flex-direction: column; gap: 5px; }
+  .display-shell--scenario .loading-timer { bottom: 24%; }
   .ad-overlay { grid-template-columns: 1fr; overflow: hidden; }
   .ad-seal { position: absolute; right: -6%; bottom: -12%; width: 50vw; opacity: .18; }
 }
