@@ -5,9 +5,8 @@ import { useEffect, useState } from "react";
 import { JoinGmQr } from "@/components/JoinGmQr";
 
 function createRoomCode() {
-  const bytes = new Uint8Array(12);
-  crypto.getRandomValues(bytes);
-  return `fc-${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+  const roomNumber = crypto.getRandomValues(new Uint16Array(1))[0] % 10_000;
+  return roomNumber.toString().padStart(4, "0");
 }
 
 function sanitizeRoom(value: string) {
@@ -15,11 +14,18 @@ function sanitizeRoom(value: string) {
 }
 
 export default function Home() {
-  const [room, setRoom] = useState("");
+  const [room, setRoom] = useState("alpha");
+  const [roomLoaded, setRoomLoaded] = useState(false);
 
   useEffect(() => {
-    setRoom(createRoomCode());
+    const savedRoom = window.localStorage.getItem("friend-computer-room");
+    if (savedRoom) setRoom(sanitizeRoom(savedRoom));
+    setRoomLoaded(true);
   }, []);
+
+  useEffect(() => {
+    if (roomLoaded && room) window.localStorage.setItem("friend-computer-room", room);
+  }, [room, roomLoaded]);
 
   const roomReady = room.length > 0;
   const fieldStyle = {
@@ -58,12 +64,12 @@ export default function Home() {
             aria-label="Session room code"
             value={room}
             onChange={(event) => setRoom(sanitizeRoom(event.target.value))}
-            placeholder="Generating secure room..."
+            placeholder="alpha"
             style={fieldStyle}
           />
         </label>
         <button type="button" onClick={() => setRoom(createRoomCode())} style={buttonStyle}>
-          GENERATE NEW ROOM
+          NEW 4-DIGIT ROOM
         </button>
 
         <div className="landing-actions">

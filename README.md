@@ -11,6 +11,7 @@ Milestone 1 is deliberately **offline-first**. Once the page is loaded, the actu
 - Next.js 16 + React 19 + TypeScript 6
 - Full-screen CRT display: `/display/[room]`
 - Mobile/laptop GM controller: `/control/[room]`
+- The landing page defaults to the simple `alpha` room, remembers the last room used, and can generate an optional four-digit room code.
 - SVG eye with organic gaze, idle scanning, micro-saccades, pupil breathing, perspective compression, expressions, automatic blinking and manual double-blinks
 - Four player gaze presets plus pointer tracking and patrol mode
 - Full Paranoia security/threat spectrum from INFRARED through ULTRAVIOLET
