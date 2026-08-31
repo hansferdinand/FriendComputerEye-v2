@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://www.alphacomplex.space/schemas/friend-computer-mission-v1.json",
+  "title": "Friend Computer Mission JSON v1",
+  "type": "object",
+  "required": ["format", "version", "id", "title", "subtitle", "premise", "publicContext", "gmGuidance", "director"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "format": { "const": "friend-computer-mission" },
+    "version": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{2,63}$" },
+    "title": { "$ref": "#/$defs/nonEmptyString" },
+    "subtitle": { "$ref": "#/$defs/nonEmptyString" },
+    "premise": { "$ref": "#/$defs/nonEmptyString" },
+    "publicContext": { "$ref": "#/$defs/nonEmptyString" },
+    "gmGuidance": { "$ref": "#/$defs/nonEmptyString" },
+    "director": {
+      "type": "object",
+      "required": ["type", "scenes"],
+      "properties": {
+        "type": { "const": "scenes" },
+        "scenes": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/scene" } }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "nonEmptyString": { "type": "string", "minLength": 1 },
+    "scene": {
+      "type": "object",
+      "required": ["id", "number", "title", "location", "scene", "objective", "publicContext", "gmGuidance", "handouts", "logVisibility", "cues"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonEmptyString" },
+        "number": { "$ref": "#/$defs/nonEmptyString" },
+        "title": { "$ref": "#/$defs/nonEmptyString" },
+        "location": { "$ref": "#/$defs/nonEmptyString" },
+        "scene": { "$ref": "#/$defs/nonEmptyString" },
+        "objective": { "$ref": "#/$defs/nonEmptyString" },
+        "publicContext": { "$ref": "#/$defs/nonEmptyString" },
+        "gmGuidance": { "$ref": "#/$defs/nonEmptyString" },
+        "handouts": { "type": "array", "items": { "type": "string" } },
+        "logVisibility": { "enum": ["COMPUTER", "GM_ONLY"] },
+        "cues": { "type": "array", "items": { "$ref": "#/$defs/cue" } }
+      },
+      "additionalProperties": false
+    },
+    "cue": {
+      "type": "object",
+      "required": ["id", "label", "commands"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonEmptyString" },
+        "label": { "$ref": "#/$defs/nonEmptyString" },
+        "note": { "type": "string" },
+        "commands": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/command" } },
+        "log": { "$ref": "#/$defs/log" }
+      },
+      "additionalProperties": false
+    },
+    "command": {
+      "oneOf": [
+        { "type": "object", "required": ["type", "x", "y"], "properties": { "type": { "const": "set-gaze" }, "x": { "type": "number" }, "y": { "type": "number" }, "target": { "type": "string" } }, "additionalProperties": false },
+        { "type": "object", "required": ["type", "expression"], "properties": { "type": { "const": "set-expression" }, "expression": { "enum": ["neutral", "happy", "suspicious", "angry", "terrified", "drugged"] }, "intensity": { "type": "number" } }, "additionalProperties": false },
+        { "type": "object", "required": ["type", "level"], "properties": { "type": { "const": "set-threat" }, "level": { "enum": ["INFRARED", "RED", "ORANGE", "YELLOW", "GREEN", "BLUE", "INDIGO", "VIOLET", "ULTRAVIOLET"] } }, "additionalProperties": false },
+        { "type": "object", "required": ["type", "text"], "properties": { "type": { "enum": ["set-status", "speak"] }, "text": { "$ref": "#/$defs/nonEmptyString" } }, "additionalProperties": false },
+        { "type": "object", "required": ["type", "enabled"], "properties": { "type": { "const": "set-patrol" }, "enabled": { "type": "boolean" } }, "additionalProperties": false },
+        { "type": "object", "required": ["type", "effect"], "properties": { "type": { "const": "effect" }, "effect": { "enum": ["blink", "double-blink", "glitch", "degauss", "error", "clone", "random-ad", "happy-ad", "interrogation", "drugged", "toggle-eye", "reset"] } }, "additionalProperties": false }
+      ]
+    },
+    "log": {
+      "type": "object",
+      "required": ["category", "visibility", "importance", "title", "detail"],
+      "properties": {
+        "category": { "enum": ["MISSION", "DISCOVERY", "ACCUSATION", "CLONE", "NPC", "EQUIPMENT", "SECRET_ORDER", "DEBRIEF", "GENERAL"] },
+        "visibility": { "enum": ["COMPUTER", "GM_ONLY"] },
+        "importance": { "enum": ["MINOR", "NORMAL", "IMPORTANT"] },
+        "title": { "$ref": "#/$defs/nonEmptyString" },
+        "detail": { "$ref": "#/$defs/nonEmptyString" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

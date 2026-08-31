@@ -146,6 +146,18 @@ button { touch-action: manipulation; }
 .overlay--error { color: white; background: rgba(207, 0, 0, 0.9); text-shadow: 5px 5px #000; }
 .overlay--clone { color: #0a1011; background: rgba(81, 255, 242, 0.92); }
 .overlay--interrogation { color: #ffeae9; background: rgba(110, 0, 0, 0.78); border: 22px solid #ff2d24; }
+.projector-state { position: absolute; inset: 0; z-index: 46; display: grid; place-items: center; align-content: center; gap: clamp(14px,2.5vw,34px); padding: clamp(28px,6vw,100px); text-align: center; color: #bfffff; background: radial-gradient(circle at 50% 30%,#11383b,#020808 68%); }
+.projector-state > span { color: #6bb5ba; font-size: clamp(9px,1.15vw,17px); letter-spacing: .22em; }
+.projector-state h2 { max-width: 1400px; margin: 0; font-family: "Arial Black",Arial,sans-serif; font-size: clamp(40px,7.5vw,125px); line-height: .9; letter-spacing: -.045em; }
+.projector-state p { margin: 0; color: #6fabad; font-size: clamp(9px,1.15vw,17px); letter-spacing: .13em; }
+.projector-state--clearance { color: #fff2ef; background: radial-gradient(circle at 50% 35%,#6f0d09,#170000 70%); border: clamp(10px,1.5vw,24px) solid #ff2d24; }
+.projector-state--clearance > span, .projector-state--clearance p { color: #ffaaa5; }
+.projector-lookup-estimate { display: grid; gap: 6px; }
+.projector-lookup-estimate small { color: #6bb5ba; font-size: clamp(9px,1vw,14px); letter-spacing: .18em; }
+.projector-lookup-estimate strong { color: #efffff; font-size: clamp(20px,3vw,50px); letter-spacing: .08em; }
+.projector-progress { width: min(1200px,92%); height: clamp(22px,3.6vw,52px); padding: 5px; border: 1px solid #4edce4; background: #010708; box-shadow: 0 0 30px rgba(72,246,255,.13); }
+.projector-progress i { display: block; height: 100%; min-width: 5px; background: repeating-linear-gradient(90deg,#48f6ff 0 18px,#16929a 18px 21px); box-shadow: 0 0 16px #48f6ff; transition: width 250ms linear; }
+.projector-progress-scale { width: min(1200px,92%); display: flex; justify-content: space-between; margin-top: -25px; color: #5f9094; font-size: clamp(7px,.8vw,11px); }
 .ad-overlay {
   position: absolute;
   inset: 4%;
@@ -347,6 +359,11 @@ button { touch-action: manipulation; }
 
 /* Mission Director scenario controls */
 .scenario-package-select { display: grid; gap: 6px; margin-bottom: 8px; color: #6e9499; font-size: 10px; letter-spacing: .12em; }
+.mission-package-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-top: 9px; }
+.mission-package-tools span { color: #6e9499; font-size: 9px; letter-spacing: .07em; }
+.standard-projector-panel { grid-column: 1 / -1; }
+.standard-projector-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 7px; margin: 10px 0; }
+.standard-projector-grid button { min-height: 62px; text-align: left; text-transform: none; line-height: 1.3; }
 .scenario-director-hero { grid-column: span 8; }
 .scenario-reminder-panel, .scenario-final-panel { grid-column: span 4; }
 .scenario-wide-panel { grid-column: 1 / -1; }
@@ -389,6 +406,7 @@ button { touch-action: manipulation; }
   .ad-media .ad-seal { display: none; }
   .ad-copy { position: relative; z-index: 2; text-shadow: 0 1px rgba(255,255,255,.45); }
   .scenario-director-hero, .scenario-reminder-panel, .scenario-final-panel, .scenario-wide-panel { grid-column: 1 / -1; }
-  .scenario-control-grid, .scenario-preset-grid, .scenario-subsystem-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .scenario-control-grid, .scenario-preset-grid, .scenario-subsystem-grid, .standard-projector-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .scenario-manual-time, .scenario-message-grid { grid-template-columns: 1fr; }
+  .standard-projector-grid { grid-template-columns: 1fr; }
 }

@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AmbientIdleEffects } from "@/components/AmbientIdleEffects";
 import { FriendEye } from "@/components/FriendEye";
+import { ProjectorStateOverlay } from "@/components/ProjectorStateOverlay";
 import { ScenarioDisplay } from "@/components/ScenarioDisplay";
 import {
   ADVERTISEMENTS,
@@ -12,6 +13,7 @@ import {
   PLAYER_PRESETS,
   type FriendCommand,
   type FriendComputerState,
+  type ProjectorState,
 } from "@/lib/friend-computer";
 import type { DisplayAudioRole } from "@/lib/display-config";
 import { createCommandBus } from "@/lib/transport";
@@ -73,6 +75,7 @@ export function FriendComputerDisplay({
   const [audioReady, setAudioReady] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [scenario, setScenario] = useState<ScenarioRuntimeSnapshot | null>(null);
+  const [projectorState, setProjectorState] = useState<ProjectorState | null>(null);
   const overlayTimerRef = useRef<number | null>(null);
   const statusLockUntilRef = useRef(0);
   const lastDirectedGazeRef = useRef(0);
@@ -196,6 +199,12 @@ export function FriendComputerDisplay({
           setState(INITIAL_STATE);
           setOverlay({ kind: "none" });
           break;
+        case "show-projector-state":
+          setProjectorState(command.state);
+          break;
+        case "clear-projector-state":
+          setProjectorState(null);
+          break;
         case "set-gaze":
           lastDirectedGazeRef.current = Date.now();
           setState((current) => ({ ...current, patrol: false, gaze: command }));
@@ -265,6 +274,7 @@ export function FriendComputerDisplay({
             lastDirectedGazeRef.current = 0;
             setState(INITIAL_STATE);
             setOverlay({ kind: "none" });
+            setProjectorState(null);
             setGlitchNonce((value) => value + 1);
           }
           break;
@@ -468,6 +478,7 @@ export function FriendComputerDisplay({
               </div>
             </div>
           ) : null}
+          {projectorState ? <ProjectorStateOverlay state={projectorState} /> : null}
 
           <div className={`status-line ${scenario ? "status-line--scenario" : ""}`}>{state.status}</div>
           <div className="scanlines" />

@@ -1,0 +1,63 @@
+{
+  "$schema": "./friend-computer-mission.schema.json",
+  "format": "friend-computer-mission",
+  "version": 1,
+  "id": "example-routine-inspection",
+  "title": "ROUTINE INSPECTION 34-B",
+  "subtitle": "Example portable Paranoia mission",
+  "premise": "The Troubleshooters must inspect a corridor that officially does not require inspection.",
+  "publicContext": "The team has received a routine RED-clearance inspection assignment. Corridor 34-B is safe, accessible, and not currently listed on any approved map.",
+  "gmGuidance": "Keep the contradiction procedural. Reward confident paperwork, suspicious cooperation, and entertaining blame.",
+  "director": {
+    "type": "scenes",
+    "scenes": [
+      {
+        "id": "briefing",
+        "number": "01",
+        "title": "THE ROUTINE BRIEFING",
+        "location": "RED Briefing Room 4",
+        "scene": "Friend Computer explains that the inspection is routine and therefore unusually urgent.",
+        "objective": "Accept the assignment and determine who is responsible for the inspection clipboard.",
+        "publicContext": "The assignment is active. Citizens must inspect Corridor 34-B without requesting information above RED clearance.",
+        "gmGuidance": "Ask who accepts custody of the clipboard before providing directions.",
+        "handouts": [
+          "INS-34/B · Routine Inspection Acceptance"
+        ],
+        "logVisibility": "COMPUTER",
+        "cues": [
+          {
+            "id": "issue-order",
+            "label": "ISSUE INSPECTION ORDER",
+            "note": "Use after clipboard custody has been assigned.",
+            "commands": [
+              {
+                "type": "set-expression",
+                "expression": "happy",
+                "intensity": 0.75
+              },
+              {
+                "type": "set-threat",
+                "level": "BLUE"
+              },
+              {
+                "type": "set-status",
+                "text": "ROUTINE INSPECTION · URGENCY MANDATORY"
+              },
+              {
+                "type": "speak",
+                "text": "Troubleshooters, proceed to Corridor Thirty Four B for a routine inspection. The corridor's absence from your map confirms that no navigation problem exists."
+              }
+            ],
+            "log": {
+              "category": "MISSION",
+              "visibility": "COMPUTER",
+              "importance": "IMPORTANT",
+              "title": "Routine inspection assigned",
+              "detail": "The Troubleshooters accepted responsibility for inspecting Corridor 34-B."
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

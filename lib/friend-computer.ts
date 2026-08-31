@@ -42,6 +42,11 @@ export const EFFECTS = [
 
 export type FriendEffect = (typeof EFFECTS)[number];
 
+export type ProjectorState = {
+  kind: "clearance-denied" | "records-lookup";
+  startedAt: number;
+};
+
 export type FriendCommand =
   | { type: "set-gaze"; x: number; y: number; target?: string }
   | { type: "set-expression"; expression: Expression; intensity?: number }
@@ -50,6 +55,8 @@ export type FriendCommand =
   | { type: "set-patrol"; enabled: boolean }
   | { type: "speak"; text: string }
   | { type: "effect"; effect: FriendEffect }
+  | { type: "show-projector-state"; state: ProjectorState }
+  | { type: "clear-projector-state" }
   | { type: "set-scenario"; snapshot: ScenarioRuntimeSnapshot }
   | { type: "exit-scenario" };
 

@@ -1,18 +1,27 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ScenarioDirectorPanel } from "@/components/ScenarioDirectorPanel";
 import type { FriendCommand } from "@/lib/friend-computer";
-import { PARANOIA_XP_ONE_SHOT, type MissionCue, type MissionScene } from "@/lib/mission-package";
-import { SATIATE_SCENARIO, createSatiateSnapshot } from "@/lib/scenarios";
+import {
+  BUILT_IN_MISSION_PACKAGES,
+  parseMissionPackageFile,
+  parseMissionPackageText,
+  type DirectorMissionPackage,
+  type SceneMissionPackageFile,
+} from "@/lib/mission-package-format";
+import type { MissionCue, MissionScene } from "@/lib/mission-package";
+import { STANDARD_PROJECTOR_PRESETS } from "@/lib/projector-presets";
+import { createSatiateSnapshot } from "@/lib/scenarios";
 import { createCommandBus, type CommandBus, type CommandReceipt, type RoomPresence } from "@/lib/transport";
 
 function combinedContext(base: string, heading: string, addition: string) {
   return `${base}\n\n${heading}:\n${addition}`.slice(0, 4000);
 }
 
-type DirectorPackageId = typeof PARANOIA_XP_ONE_SHOT.id | typeof SATIATE_SCENARIO.id;
+const IMPORTED_MISSIONS_STORAGE_KEY = "friend-computer-imported-missions:v1";
+const DEFAULT_MISSION_ID = BUILT_IN_MISSION_PACKAGES[0].id;
 
 export function MissionDirectorPanel({ room }: { room: string }) {
   const [gmKey, setGmKey] = useState("");
@@ -24,9 +33,30 @@ export function MissionDirectorPanel({ room }: { room: string }) {
   const [transport, setTransport] = useState<CommandBus["transport"]>("connecting");
   const [presence, setPresence] = useState<RoomPresence>({ displays: 0, controls: 0, displayClients: [] });
   const [cueAck, setCueAck] = useState("NO CUE SENT");
-  const [packageId, setPackageId] = useState<DirectorPackageId>(PARANOIA_XP_ONE_SHOT.id);
+  const [packageId, setPackageId] = useState(DEFAULT_MISSION_ID);
+  const [importedPackages, setImportedPackages] = useState<SceneMissionPackageFile[]>([]);
   const lastCommandId = useRef<string | null>(null);
   const busRef = useRef<CommandBus | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const missionPackages = useMemo(() => {
+    const packages = new Map<string, DirectorMissionPackage>();
+    for (const mission of BUILT_IN_MISSION_PACKAGES) packages.set(mission.id, mission);
+    for (const mission of importedPackages) if (!packages.has(mission.id)) packages.set(mission.id, mission);
+    return [...packages.values()];
+  }, [importedPackages]);
+  const activePackage = missionPackages.find((mission) => mission.id === packageId) ?? missionPackages[0];
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(IMPORTED_MISSIONS_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) as unknown : [];
+      if (!Array.isArray(parsed)) return;
+      setImportedPackages(parsed.map(parseMissionPackageFile));
+    } catch {
+      window.localStorage.removeItem(IMPORTED_MISSIONS_STORAGE_KEY);
+    }
+  }, []);
 
   useEffect(() => {
     const onReceipt = (receipt: CommandReceipt) => {
@@ -65,8 +95,12 @@ export function MissionDirectorPanel({ room }: { room: string }) {
       const context = data.context && typeof data.context === "object" ? data.context as Record<string, unknown> : null;
       const currentScene = context ? String(context.scene ?? "") : "";
       const missionTitle = context ? String(context.mission_title ?? "") : "";
-      if (missionTitle === SATIATE_SCENARIO.title) setPackageId(SATIATE_SCENARIO.id);
-      const matching = PARANOIA_XP_ONE_SHOT.scenes.find((scene) => currentScene.startsWith(scene.title));
+      const matchingPackage = missionPackages.find((mission) => mission.title === missionTitle);
+      if (matchingPackage) setPackageId(matchingPackage.id);
+      const scenes = matchingPackage?.director.type === "scenes"
+        ? matchingPackage.director.scenes
+        : activePackage.director.type === "scenes" ? activePackage.director.scenes : [];
+      const matching = scenes.find((scene) => currentScene.startsWith(scene.title));
       setActiveSceneId(matching?.id ?? null);
       setUnlocked(true);
       setStatusMessage("MISSION PACKAGE AUTHORIZED");
@@ -75,9 +109,10 @@ export function MissionDirectorPanel({ room }: { room: string }) {
     } finally {
       setBusy(false);
     }
-  }, [authorizedFetch, gmKey, room]);
+  }, [activePackage, authorizedFetch, gmKey, missionPackages, room]);
 
   const activateScene = useCallback(async (scene: MissionScene) => {
+    if (activePackage.director.type !== "scenes") return;
     setBusy(true);
     setError("");
     setStatusMessage("");
@@ -86,12 +121,12 @@ export function MissionDirectorPanel({ room }: { room: string }) {
         action: "save",
         room,
         status: scene.id === "debrief" ? "COMPLETE" : "ACTIVE",
-        missionTitle: PARANOIA_XP_ONE_SHOT.title,
+        missionTitle: activePackage.title,
         location: scene.location,
         scene: `${scene.title} — ${scene.scene}`,
         currentObjective: scene.objective,
-        publicContext: combinedContext(PARANOIA_XP_ONE_SHOT.publicContext, "CURRENT SCENE — FRIEND COMPUTER KNOWLEDGE", scene.publicContext),
-        gmGuidance: combinedContext(PARANOIA_XP_ONE_SHOT.gmGuidance, "CURRENT SCENE — PRIVATE GM GUIDANCE", scene.gmGuidance),
+        publicContext: combinedContext(activePackage.publicContext, "CURRENT SCENE — FRIEND COMPUTER KNOWLEDGE", scene.publicContext),
+        gmGuidance: combinedContext(activePackage.gmGuidance, "CURRENT SCENE — PRIVATE GM GUIDANCE", scene.gmGuidance),
       });
 
       await authorizedFetch("/api/session-events", {
@@ -112,7 +147,7 @@ export function MissionDirectorPanel({ room }: { room: string }) {
     } finally {
       setBusy(false);
     }
-  }, [authorizedFetch, room]);
+  }, [activePackage, authorizedFetch, room]);
 
   const logCue = useCallback(async (cue: MissionCue) => {
     if (!cue.log) return;
@@ -160,12 +195,46 @@ export function MissionDirectorPanel({ room }: { room: string }) {
     lastCommandId.current = bus.send(command);
   }, [presence.displays]);
 
-  const selectPackage = useCallback((next: DirectorPackageId) => {
+  const selectPackage = useCallback((next: string) => {
+    const nextPackage = missionPackages.find((mission) => mission.id === next);
+    if (!nextPackage) return;
     setPackageId(next);
     setActiveSceneId(null);
-    setStatusMessage(next === SATIATE_SCENARIO.id ? "SATIATE-7 CONFIGURED · COUNTDOWN ON HOLD" : "AUTH-22 PACKAGE SELECTED");
-    if (next === SATIATE_SCENARIO.id) sendDirectorCommand({ type: "set-scenario", snapshot: createSatiateSnapshot() });
+    setStatusMessage(`${nextPackage.title} SELECTED${nextPackage.director.type === "countdown" ? " · COUNTDOWN ON HOLD" : ""}`);
+    sendDirectorCommand({ type: "clear-projector-state" });
+    if (nextPackage.director.type === "countdown") sendDirectorCommand({ type: "set-scenario", snapshot: createSatiateSnapshot() });
     else sendDirectorCommand({ type: "exit-scenario" });
+  }, [missionPackages, sendDirectorCommand]);
+
+  const importMission = useCallback(async (file: File | undefined) => {
+    if (!file) return;
+    setError("");
+    try {
+      const mission = parseMissionPackageText(await file.text());
+      if (BUILT_IN_MISSION_PACKAGES.some((item) => item.id === mission.id)) throw new Error(`Mission id "${mission.id}" is reserved by a built-in package.`);
+      setImportedPackages((current) => {
+        const next = [...current.filter((item) => item.id !== mission.id), mission];
+        window.localStorage.setItem(IMPORTED_MISSIONS_STORAGE_KEY, JSON.stringify(next));
+        return next;
+      });
+      setPackageId(mission.id);
+      setActiveSceneId(null);
+      sendDirectorCommand({ type: "exit-scenario" });
+      setStatusMessage(`${mission.title} LOADED · SAVED ON THIS GM BROWSER`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to load mission file.");
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }, [sendDirectorCommand]);
+
+  const runProjectorPreset = useCallback((preset: (typeof STANDARD_PROJECTOR_PRESETS)[number]) => {
+    sendDirectorCommand({ type: "show-projector-state", state: { kind: preset.id, startedAt: Date.now() } });
+    sendDirectorCommand({ type: "set-expression", expression: preset.expression, intensity: preset.intensity });
+    sendDirectorCommand({ type: "set-threat", level: preset.threat });
+    sendDirectorCommand({ type: "set-status", text: preset.status });
+    sendDirectorCommand({ type: "speak", text: preset.speak });
+    setStatusMessage(`PROJECTOR STATE: ${preset.label}`);
   }, [sendDirectorCommand]);
 
   const displayOnline = transport === "realtime" && presence.displays > 0;
@@ -188,15 +257,25 @@ export function MissionDirectorPanel({ room }: { room: string }) {
 
       <div className="control-grid">
         <section className="panel" style={{ gridColumn: "1 / -1" }}>
-          <div className="panel-heading"><span>DIR</span><h2>{packageId === SATIATE_SCENARIO.id ? SATIATE_SCENARIO.title : PARANOIA_XP_ONE_SHOT.title}</h2></div>
+          <div className="panel-heading"><span>DIR</span><h2>{activePackage.title}</h2></div>
           <label className="scenario-package-select">
             <span>SELECT MISSION PACKAGE</span>
-            <select value={packageId} onChange={(event) => selectPackage(event.target.value as DirectorPackageId)}>
-              <option value={PARANOIA_XP_ONE_SHOT.id}>{PARANOIA_XP_ONE_SHOT.title}</option>
-              <option value={SATIATE_SCENARIO.id}>{SATIATE_SCENARIO.title}</option>
+            <select value={activePackage.id} onChange={(event) => selectPackage(event.target.value)}>
+              {missionPackages.map((mission) => <option key={mission.id} value={mission.id}>{mission.title}</option>)}
             </select>
           </label>
-          <p style={{ color: "#a8d7da", lineHeight: 1.5, marginTop: 12 }}>{packageId === SATIATE_SCENARIO.id ? SATIATE_SCENARIO.premise : PARANOIA_XP_ONE_SHOT.premise}</p>
+          <div className="mission-package-tools">
+            <button type="button" onClick={() => fileInputRef.current?.click()}>LOAD MISSION JSON</button>
+            <span>{missionPackages.length} PACKAGE{missionPackages.length === 1 ? "" : "S"} AVAILABLE · CUSTOM FILES STAY ON THIS GM BROWSER</span>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,application/json"
+              hidden
+              onChange={(event) => void importMission(event.target.files?.[0])}
+            />
+          </div>
+          <p style={{ color: "#a8d7da", lineHeight: 1.5, marginTop: 12 }}>{activePackage.premise}</p>
           <div style={{ display: "grid", gridTemplateColumns: "minmax(220px,1fr) auto", gap: 10 }}>
             <input
               type="password"
@@ -218,13 +297,27 @@ export function MissionDirectorPanel({ room }: { room: string }) {
           {statusMessage ? <div style={{ marginTop: 10, color: "#87f6fb", fontSize: 12 }}>{statusMessage}</div> : null}
           {error ? <div style={{ marginTop: 10, color: "#ff8d86", fontSize: 12 }}>{error}</div> : null}
           <small style={{ display: "block", marginTop: 10, color: "#6e9499", lineHeight: 1.45 }}>
-            {packageId === SATIATE_SCENARIO.id
+            {activePackage.director.type === "countdown"
               ? "Selecting this scenario configures the projector on a 90-minute hold. The timer starts only when the GM presses START. Scenario controls use the existing command bus and persistent Mission Context / Session Log."
-              : "Activating a scene updates persistent Mission Context and writes an IMPORTANT Session Log entry. Cue buttons act directly on the projector and do not require an OpenAI call."}
+              : "Scene packages use Friend Computer Mission JSON v1. Activating a scene updates persistent Mission Context and writes an IMPORTANT Session Log entry. Cue buttons act directly on the projector."}
           </small>
         </section>
 
-        {unlocked && packageId === SATIATE_SCENARIO.id ? (
+        {unlocked ? (
+          <section className="panel standard-projector-panel">
+            <div className="panel-heading"><span>STD</span><h2>Standard Projector States</h2></div>
+            <p className="scenario-muted">Available in every mission. Both states are spoken by the Primary Audio display.</p>
+            <div className="standard-projector-grid">
+              {STANDARD_PROJECTOR_PRESETS.map((preset) => (
+                <button type="button" key={preset.id} className={preset.id === "clearance-denied" ? "danger" : ""} onClick={() => runProjectorPreset(preset)}>{preset.speak}</button>
+              ))}
+              <button type="button" onClick={() => sendDirectorCommand({ type: "clear-projector-state" })}>RETURN TO MISSION DISPLAY</button>
+            </div>
+            <small className="scenario-muted">{primaryAudioDisplayCount > 0 ? `● PRIMARY AUDIO READY (${primaryAudioDisplayCount})` : "× NO PRIMARY AUDIO DISPLAY · Press M on the display to configure audio."}</small>
+          </section>
+        ) : null}
+
+        {unlocked && activePackage.director.type === "countdown" ? (
           <ScenarioDirectorPanel
             room={room}
             gmKey={gmKey}
@@ -234,7 +327,7 @@ export function MissionDirectorPanel({ room }: { room: string }) {
           />
         ) : null}
 
-        {unlocked && packageId === PARANOIA_XP_ONE_SHOT.id ? PARANOIA_XP_ONE_SHOT.scenes.map((scene) => {
+        {unlocked && activePackage.director.type === "scenes" ? activePackage.director.scenes.map((scene) => {
           const active = scene.id === activeSceneId;
           return (
             <section className="panel" key={scene.id} style={{ gridColumn: "1 / -1", borderColor: active ? "#48f6ff" : undefined }}>
