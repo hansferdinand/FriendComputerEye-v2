@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AmbientIdleEffects } from "@/components/AmbientIdleEffects";
 import { FriendEye } from "@/components/FriendEye";
+import { ScenarioDisplay } from "@/components/ScenarioDisplay";
 import {
   ADVERTISEMENTS,
   IDLE_MESSAGES,
@@ -14,6 +15,7 @@ import {
 } from "@/lib/friend-computer";
 import type { DisplayAudioRole } from "@/lib/display-config";
 import { createCommandBus } from "@/lib/transport";
+import type { ScenarioRuntimeSnapshot } from "@/lib/scenario-runtime";
 
 type Overlay =
   | { kind: "none" }
@@ -70,6 +72,7 @@ export function FriendComputerDisplay({
   const [warmupNonce, setWarmupNonce] = useState(0);
   const [audioReady, setAudioReady] = useState(false);
   const [speaking, setSpeaking] = useState(false);
+  const [scenario, setScenario] = useState<ScenarioRuntimeSnapshot | null>(null);
   const overlayTimerRef = useRef<number | null>(null);
   const statusLockUntilRef = useRef(0);
   const lastDirectedGazeRef = useRef(0);
@@ -185,6 +188,14 @@ export function FriendComputerDisplay({
   const applyCommand = useCallback(
     (command: FriendCommand) => {
       switch (command.type) {
+        case "set-scenario":
+          setScenario(command.snapshot.displayEnabled ? command.snapshot : null);
+          break;
+        case "exit-scenario":
+          setScenario(null);
+          setState(INITIAL_STATE);
+          setOverlay({ kind: "none" });
+          break;
         case "set-gaze":
           lastDirectedGazeRef.current = Date.now();
           setState((current) => ({ ...current, patrol: false, gaze: command }));
@@ -401,10 +412,11 @@ export function FriendComputerDisplay({
   }, [acquireWakeLock, audioEnabled]);
 
   const currentAd = overlay.kind === "ad" ? ADVERTISEMENTS[overlay.index] : null;
-  const ambientActive = audioReady && overlay.kind === "none" && !speaking;
+  const ambientActive = audioReady && overlay.kind === "none" && !speaking && scenario?.zeroTriggeredAt === null;
+  const scenarioRevealing = scenario?.zeroTriggeredAt !== null;
 
   return (
-    <main className={`display-shell ${speaking ? "display-shell--speaking" : ""} ${audioReady ? "display-shell--active" : ""}`}>
+    <main className={`display-shell ${speaking ? "display-shell--speaking" : ""} ${audioReady ? "display-shell--active" : ""} ${scenario ? "display-shell--scenario" : ""}`}>
       <section className={`crt-frame glitch-${glitchNonce % 2}`}>
         <header className="terminal-header">
           <span>AlphaOS v2.0.0-FRIENDSHIP</span>
@@ -416,14 +428,15 @@ export function FriendComputerDisplay({
           <FriendEye
             gazeX={state.gaze.x}
             gazeY={state.gaze.y}
-            expression={state.expression}
-            intensity={state.intensity}
+            expression={scenarioRevealing ? "happy" : state.expression}
+            intensity={scenarioRevealing ? 0.92 : state.intensity}
             blinkNonce={blinkNonce}
             doubleBlinkNonce={doubleBlinkNonce}
             visible={state.eyeVisible}
             ambient={ambientActive}
           />
           <AmbientIdleEffects active={ambientActive} />
+          {scenario ? <ScenarioDisplay snapshot={scenario} /> : null}
 
           {overlay.kind === "error" ? (
             <div className="overlay overlay--error">SYSTEM ERROR<br /><small>REPORT TO NEAREST TERMINATION BOOTH</small></div>
@@ -456,7 +469,7 @@ export function FriendComputerDisplay({
             </div>
           ) : null}
 
-          <div className="status-line">{state.status}</div>
+          <div className={`status-line ${scenario ? "status-line--scenario" : ""}`}>{state.status}</div>
           <div className="scanlines" />
           <div className="phosphor-mask" />
           <div className="glass-vignette" />

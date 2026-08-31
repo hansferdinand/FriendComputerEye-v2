@@ -185,6 +185,36 @@ button { touch-action: manipulation; }
 .audio-unlock small { display: block; margin-top: 9px; color: #6fa8ad; font-weight: 400; letter-spacing: .04em; }
 .display-debug { position: fixed; z-index: 90; left: 50%; bottom: 6px; transform: translateX(-50%); color: #375f62; font-size: 9px; white-space: nowrap; }
 
+/* Reusable Mission Director scenario presentation */
+.display-shell--scenario .eye-stage { inset: 2% 18% 31%; }
+.display-shell--scenario .eye-stage svg { max-width: 980px; }
+.status-line--scenario { bottom: 1.1%; font-size: clamp(8px, .9vw, 13px); opacity: .76; }
+.scenario-hud { position: absolute; inset: auto 5% 5.5%; z-index: 12; display: grid; grid-template-columns: minmax(220px,1fr) auto minmax(220px,1fr); gap: clamp(16px,3vw,50px); align-items: end; color: #9ffcff; pointer-events: none; }
+.scenario-ident, .scenario-stage { min-width: 0; padding: 10px 12px; border-top: 1px solid #2e7176; background: linear-gradient(90deg,rgba(4,20,22,.82),transparent); }
+.scenario-stage { text-align: right; background: linear-gradient(270deg,rgba(4,20,22,.82),transparent); }
+.scenario-ident span, .scenario-stage span { display: block; color: #6da8ac; font-size: clamp(7px,.7vw,10px); letter-spacing: .16em; }
+.scenario-ident strong, .scenario-stage strong { display: block; margin-top: 5px; overflow: hidden; color: #bfffff; font-size: clamp(10px,1.05vw,16px); letter-spacing: .07em; text-overflow: ellipsis; }
+.scenario-ident small { display: block; margin-top: 4px; color: #6f9fa3; font-size: clamp(7px,.7vw,10px); }
+.scenario-clock { color: #e6ffff; font-family: "Arial Black",Arial,sans-serif; font-variant-numeric: tabular-nums; font-size: clamp(45px,8vw,126px); line-height: .83; letter-spacing: -.055em; text-shadow: 0 0 16px rgba(72,246,255,.62),0 0 44px rgba(72,246,255,.18); white-space: nowrap; }
+.scenario-hud--analysis .scenario-ident { border-color: #d2b451; }
+.scenario-hud--analysis .scenario-ident strong { color: #ffe594; }
+.scenario-hud--alert .scenario-clock, .scenario-hud--warning .scenario-clock { color: #ff716a; text-shadow: 0 0 18px rgba(255,45,36,.72); }
+.scenario-hud--alert .scenario-ident, .scenario-hud--warning .scenario-ident { border-color: #c83d36; }
+.scenario-hud--final-minute { animation: scenarioUrgency 1s steps(2) infinite; }
+.scenario-hud--final-ten { inset: 18% 5% 7%; display: grid; grid-template-columns: 1fr; place-items: center; align-content: center; background: rgba(26,0,0,.38); border: 1px solid rgba(255,65,55,.52); }
+.scenario-hud--final-ten .scenario-clock { grid-row: 1; font-size: clamp(92px,18vw,300px); color: #fff0ed; text-shadow: 0 0 25px #ff2d24,0 0 80px rgba(255,45,36,.55); }
+.scenario-hud--final-ten .scenario-ident, .scenario-hud--final-ten .scenario-stage { width: min(850px,90%); text-align: center; background: none; }
+.scenario-blackout { position: absolute; inset: 0; z-index: 42; background: #000; }
+.scenario-reveal { position: absolute; inset: 0; z-index: 41; display: grid; place-items: center; align-content: center; padding: 5vw; text-align: center; color: #082523; background: radial-gradient(circle,#fff7a9 0,#87f7bd 42%,#43c9c1 100%); animation: revealIn 420ms cubic-bezier(.1,.8,.1,1); }
+.scenario-reveal-seal { padding: 9px 14px; border: 3px double #0b4b45; border-radius: 999px; font-weight: 1000; letter-spacing: .18em; transform: rotate(-2deg); }
+.scenario-reveal h2 { max-width: 1300px; margin: 24px 0 12px; font-family: "Arial Black",Arial,sans-serif; font-size: clamp(50px,9vw,150px); line-height: .88; letter-spacing: -.055em; }
+.scenario-reveal p { max-width: 1000px; margin: 8px 0; font-weight: 900; font-size: clamp(16px,2vw,32px); letter-spacing: .08em; }
+.scenario-reveal--cafeteria-malfunction { color: #381808; background: #ffc05d; }
+.scenario-reveal--weaponized-lunch { color: #fff; background: radial-gradient(circle,#b10d08,#250000 70%); }
+.scenario-reveal--device-destroyed { color: #b8c4c4; background: #080b0b; }
+@keyframes scenarioUrgency { 50% { filter: brightness(1.28); } }
+@keyframes revealIn { from { opacity: 0; transform: scale(1.08); } to { opacity: 1; transform: none; } }
+
 /* CONTROL */
 .control-shell { min-height: 100vh; padding: clamp(14px, 2.5vw, 32px); background: radial-gradient(circle at 50% -10%, rgba(25,138,145,.12), transparent 35%), #030607; }
 .control-header { max-width: 1180px; margin: 0 auto 18px; display: flex; justify-content: space-between; align-items: end; gap: 20px; }
@@ -207,6 +237,7 @@ button { touch-action: manipulation; }
 .panel button:hover, .panel button:focus-visible { border-color: var(--cyan); color: #eaffff; background: #0c1b1e; transform: translateY(-1px); }
 .panel button:active { transform: translateY(1px); }
 .panel button.is-active { color: #001012; background: var(--cyan); border-color: var(--cyan); }
+.panel select { width: 100%; border: 1px solid #25555a; background: #020607; color: #d9fbfd; outline: none; padding: 11px 12px; font: inherit; }
 .button-row { display: flex; gap: 8px; margin-top: 9px; }
 .button-row > * { flex: 1; }
 .button-row--tight button { padding-inline: 6px; }
@@ -249,6 +280,12 @@ button { touch-action: manipulation; }
   .threat-grid { grid-template-columns: repeat(3, 1fr); }
   .ad-overlay { grid-template-columns: 1fr; overflow: hidden; }
   .ad-seal { position: absolute; right: -6%; bottom: -12%; width: 50vw; opacity: .18; }
+}
+
+@media (max-aspect-ratio: 4/3) {
+  .scenario-hud { grid-template-columns: 1fr; place-items: center; text-align: center; }
+  .scenario-ident, .scenario-stage { display: none; }
+  .display-shell--scenario .eye-stage { inset: 4% 8% 34%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -308,6 +345,33 @@ button { touch-action: manipulation; }
 .connection-pill--bad { color: #ff8d86; border-color: #78352f; }
 .connection-pill--bad i { background: #ff5e55; box-shadow: 0 0 8px #ff5e55; }
 
+/* Mission Director scenario controls */
+.scenario-package-select { display: grid; gap: 6px; margin-bottom: 8px; color: #6e9499; font-size: 10px; letter-spacing: .12em; }
+.scenario-director-hero { grid-column: span 8; }
+.scenario-reminder-panel, .scenario-final-panel { grid-column: span 4; }
+.scenario-wide-panel { grid-column: 1 / -1; }
+.scenario-director-clock { color: #eaffff; font-family: "Arial Black",Arial,sans-serif; font-variant-numeric: tabular-nums; font-size: clamp(48px,8vw,106px); line-height: .86; letter-spacing: -.055em; text-shadow: 0 0 20px rgba(72,246,255,.42); }
+.scenario-director-state { margin: 12px 0; color: #7edce1; font-size: 11px; letter-spacing: .12em; }
+.scenario-control-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 7px; }
+.scenario-manual-time { display: grid; grid-template-columns: minmax(140px,1fr) repeat(3,auto); gap: 7px; margin: 9px 0; }
+.scenario-feedback { margin-top: 9px; color: #87f6fb; font-size: 11px; }
+.scenario-feedback--error { color: #ff8d86; }
+.scenario-reminder { padding: 13px; border: 1px solid #77662b; background: #151205; }
+.scenario-reminder strong { color: #ffe17d; font-size: 15px; }
+.scenario-reminder p { color: #c9bc83; line-height: 1.4; }
+.scenario-reminder small, .scenario-muted { display: block; color: #80795d; font-size: 10px; line-height: 1.4; }
+.scenario-reminder button { width: 100%; margin-top: 12px; }
+.scenario-final-panel select { margin-top: 9px; }
+.scenario-preset-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 7px; }
+.scenario-message-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; }
+.scenario-message-grid button { min-height: 58px; text-align: left; text-transform: none; line-height: 1.35; }
+.scenario-subsystem-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 7px; margin-bottom: 9px; }
+.scenario-subsystem { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.scenario-subsystem span { text-align: left; }
+.scenario-subsystem--damaged { border-color: #b98335 !important; color: #ffd17a !important; }
+.scenario-subsystem--modified { border-color: #7752a8 !important; color: #d3a8ff !important; }
+.scenario-subsystem--disabled { border-color: #7a3438 !important; color: #ff9d96 !important; background: #180707 !important; }
+
 @keyframes crtWarmup {
   0% { opacity: 1; transform: scaleY(.006) scaleX(.12); filter: brightness(5); }
   14% { opacity: 1; transform: scaleY(.012) scaleX(1); }
@@ -324,4 +388,7 @@ button { touch-action: manipulation; }
   .ad-media > img { width: 100%; height: 100%; max-height: none; object-fit: cover; }
   .ad-media .ad-seal { display: none; }
   .ad-copy { position: relative; z-index: 2; text-shadow: 0 1px rgba(255,255,255,.45); }
+  .scenario-director-hero, .scenario-reminder-panel, .scenario-final-panel, .scenario-wide-panel { grid-column: 1 / -1; }
+  .scenario-control-grid, .scenario-preset-grid, .scenario-subsystem-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .scenario-manual-time, .scenario-message-grid { grid-template-columns: 1fr; }
 }

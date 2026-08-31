@@ -56,10 +56,35 @@ The display must be clicked once on **INITIALIZE FRIEND COMPUTER** so the browse
 | `Space` | Blink |
 | `Esc` | Reset display |
 
-## Deployment status
+## Current platform
 
-Vercel is connected to this repository. Milestone 1 is being visually verified from the `feat/v2-milestone-1` preview before merge to `main`.
+The repository now includes the later show-running systems as well as the original display and manual controller:
 
-## Milestone 2
+- Supabase Realtime Broadcast, presence, display acknowledgements, and local browser fallbacks
+- multi-display naming with primary-audio and visual-only roles
+- text and realtime AI Copilot surfaces with GM-controlled projector actions
+- persistent Mission Context and Session Event Log
+- Mission Director packages and projector cues
+- citizen roster, notices, secret-society mail, invitations, and Resend delivery
+- show-readiness diagnostics
 
-Milestone 2 adds Supabase Realtime as a cross-device transport so the controller can run from a phone/tablet while preserving the local transports above as show-safe fallbacks.
+The manual controller remains isolated at `/control/[room]`; optional GM tools are linked from its menu and the zero-JavaScript `/join/[room]` checkpoint.
+
+## Mission Director scenarios
+
+Open `/mission/[room]` and select a mission package. Existing general Friend Computer behavior remains available while a package is active.
+
+### 90 Minutes to Treason
+
+The `90-minutes-to-treason` package adds a show-safe SATIATE-7 runtime:
+
+- paused-by-default `01:30:00` real-time countdown
+- start, pause/resume, reset, add/remove, manual time, and manual zero controls
+- GM-only, dismissible pacing reminders
+- Friend Computer, R&D, treason, and device-warning presentation presets
+- explicitly armed final pre-service sequence
+- selectable lunch, malfunction, weaponized, and destroyed-device endings
+- structured SATIATE subsystem tracking and Session Log notes
+- room-scoped local recovery plus resynchronization when displays join
+
+The display derives its countdown from an absolute deadline, preventing drift across throttled tabs or multiple projectors. Returning to another package or using **Return to Friend Computer** exits scenario presentation without replacing the normal Eye, Copilot, speech, communications, or logging systems.

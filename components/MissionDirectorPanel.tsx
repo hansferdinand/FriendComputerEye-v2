@@ -2,12 +2,17 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ScenarioDirectorPanel } from "@/components/ScenarioDirectorPanel";
+import type { FriendCommand } from "@/lib/friend-computer";
 import { PARANOIA_XP_ONE_SHOT, type MissionCue, type MissionScene } from "@/lib/mission-package";
+import { SATIATE_SCENARIO, createSatiateSnapshot } from "@/lib/scenarios";
 import { createCommandBus, type CommandBus, type CommandReceipt, type RoomPresence } from "@/lib/transport";
 
 function combinedContext(base: string, heading: string, addition: string) {
   return `${base}\n\n${heading}:\n${addition}`.slice(0, 4000);
 }
+
+type DirectorPackageId = typeof PARANOIA_XP_ONE_SHOT.id | typeof SATIATE_SCENARIO.id;
 
 export function MissionDirectorPanel({ room }: { room: string }) {
   const [gmKey, setGmKey] = useState("");
@@ -19,6 +24,7 @@ export function MissionDirectorPanel({ room }: { room: string }) {
   const [transport, setTransport] = useState<CommandBus["transport"]>("connecting");
   const [presence, setPresence] = useState<RoomPresence>({ displays: 0, controls: 0 });
   const [cueAck, setCueAck] = useState("NO CUE SENT");
+  const [packageId, setPackageId] = useState<DirectorPackageId>(PARANOIA_XP_ONE_SHOT.id);
   const lastCommandId = useRef<string | null>(null);
   const busRef = useRef<CommandBus | null>(null);
 
@@ -58,6 +64,8 @@ export function MissionDirectorPanel({ room }: { room: string }) {
       const data = await authorizedFetch("/api/session-context", { action: "get", room });
       const context = data.context && typeof data.context === "object" ? data.context as Record<string, unknown> : null;
       const currentScene = context ? String(context.scene ?? "") : "";
+      const missionTitle = context ? String(context.mission_title ?? "") : "";
+      if (missionTitle === SATIATE_SCENARIO.title) setPackageId(SATIATE_SCENARIO.id);
       const matching = PARANOIA_XP_ONE_SHOT.scenes.find((scene) => currentScene.startsWith(scene.title));
       setActiveSceneId(matching?.id ?? null);
       setUnlocked(true);
@@ -142,13 +150,31 @@ export function MissionDirectorPanel({ room }: { room: string }) {
     }
   }, [logCue, presence.displays]);
 
+  const sendDirectorCommand = useCallback((command: FriendCommand) => {
+    const bus = busRef.current;
+    if (!bus) {
+      setError("Display command bus is unavailable.");
+      return;
+    }
+    setCueAck(presence.displays > 0 ? "AWAITING DISPLAY ACK" : "DISPLAY NOT DETECTED");
+    lastCommandId.current = bus.send(command);
+  }, [presence.displays]);
+
+  const selectPackage = useCallback((next: DirectorPackageId) => {
+    setPackageId(next);
+    setActiveSceneId(null);
+    setStatusMessage(next === SATIATE_SCENARIO.id ? "SATIATE-7 CONFIGURED · COUNTDOWN ON HOLD" : "AUTH-22 PACKAGE SELECTED");
+    if (next === SATIATE_SCENARIO.id) sendDirectorCommand({ type: "set-scenario", snapshot: createSatiateSnapshot() });
+    else sendDirectorCommand({ type: "exit-scenario" });
+  }, [sendDirectorCommand]);
+
   const displayOnline = transport === "realtime" && presence.displays > 0;
 
   return (
     <main className="control-shell">
       <header className="control-header">
         <div>
-          <span className="control-eyebrow">PARANOIA XP · PRELOADED ONE-SHOT</span>
+          <span className="control-eyebrow">PARANOIA XP · REUSABLE SCENARIO DIRECTOR</span>
           <h1>Mission Director</h1>
         </div>
         <div className="control-header-actions">
@@ -161,8 +187,15 @@ export function MissionDirectorPanel({ room }: { room: string }) {
 
       <div className="control-grid">
         <section className="panel" style={{ gridColumn: "1 / -1" }}>
-          <div className="panel-heading"><span>DIR</span><h2>{PARANOIA_XP_ONE_SHOT.title}</h2></div>
-          <p style={{ color: "#a8d7da", lineHeight: 1.5, marginTop: 0 }}>{PARANOIA_XP_ONE_SHOT.premise}</p>
+          <div className="panel-heading"><span>DIR</span><h2>{packageId === SATIATE_SCENARIO.id ? SATIATE_SCENARIO.title : PARANOIA_XP_ONE_SHOT.title}</h2></div>
+          <label className="scenario-package-select">
+            <span>SELECT MISSION PACKAGE</span>
+            <select value={packageId} onChange={(event) => selectPackage(event.target.value as DirectorPackageId)}>
+              <option value={PARANOIA_XP_ONE_SHOT.id}>{PARANOIA_XP_ONE_SHOT.title}</option>
+              <option value={SATIATE_SCENARIO.id}>{SATIATE_SCENARIO.title}</option>
+            </select>
+          </label>
+          <p style={{ color: "#a8d7da", lineHeight: 1.5, marginTop: 12 }}>{packageId === SATIATE_SCENARIO.id ? SATIATE_SCENARIO.premise : PARANOIA_XP_ONE_SHOT.premise}</p>
           <div style={{ display: "grid", gridTemplateColumns: "minmax(220px,1fr) auto", gap: 10 }}>
             <input
               type="password"
@@ -184,11 +217,17 @@ export function MissionDirectorPanel({ room }: { room: string }) {
           {statusMessage ? <div style={{ marginTop: 10, color: "#87f6fb", fontSize: 12 }}>{statusMessage}</div> : null}
           {error ? <div style={{ marginTop: 10, color: "#ff8d86", fontSize: 12 }}>{error}</div> : null}
           <small style={{ display: "block", marginTop: 10, color: "#6e9499", lineHeight: 1.45 }}>
-            Activating a scene updates persistent Mission Context and writes an IMPORTANT Session Log entry. Cue buttons act directly on the projector and do not require an OpenAI call.
+            {packageId === SATIATE_SCENARIO.id
+              ? "Selecting this scenario configures the projector on a 90-minute hold. The timer starts only when the GM presses START. Scenario controls use the existing command bus and persistent Mission Context / Session Log."
+              : "Activating a scene updates persistent Mission Context and writes an IMPORTANT Session Log entry. Cue buttons act directly on the projector and do not require an OpenAI call."}
           </small>
         </section>
 
-        {unlocked ? PARANOIA_XP_ONE_SHOT.scenes.map((scene) => {
+        {unlocked && packageId === SATIATE_SCENARIO.id ? (
+          <ScenarioDirectorPanel room={room} gmKey={gmKey} displayCount={presence.displays} sendCommand={sendDirectorCommand} />
+        ) : null}
+
+        {unlocked && packageId === PARANOIA_XP_ONE_SHOT.id ? PARANOIA_XP_ONE_SHOT.scenes.map((scene) => {
           const active = scene.id === activeSceneId;
           return (
             <section className="panel" key={scene.id} style={{ gridColumn: "1 / -1", borderColor: active ? "#48f6ff" : undefined }}>

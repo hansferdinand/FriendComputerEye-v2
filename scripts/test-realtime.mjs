@@ -118,4 +118,8 @@ try {
     controller.removeChannel(controllerChannel),
     display.removeChannel(displayChannel),
   ]);
+  await Promise.allSettled([
+    controller.realtime.disconnect(),
+    display.realtime.disconnect(),
+  ]);
 }

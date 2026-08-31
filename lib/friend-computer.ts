@@ -1,3 +1,5 @@
+import type { ScenarioRuntimeSnapshot } from "@/lib/scenario-runtime";
+
 export const THREAT_LEVELS = [
   "INFRARED",
   "RED",
@@ -47,7 +49,9 @@ export type FriendCommand =
   | { type: "set-status"; text: string }
   | { type: "set-patrol"; enabled: boolean }
   | { type: "speak"; text: string }
-  | { type: "effect"; effect: FriendEffect };
+  | { type: "effect"; effect: FriendEffect }
+  | { type: "set-scenario"; snapshot: ScenarioRuntimeSnapshot }
+  | { type: "exit-scenario" };
 
 export type CommandEnvelope = {
   id: string;
