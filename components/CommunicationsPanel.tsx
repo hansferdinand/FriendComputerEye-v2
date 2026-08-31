@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useGmSession } from "@/lib/gm-session";
 
 const MAX_CITIZENS = 16;
 const CLEARANCES = ["INFRARED", "RED", "ORANGE", "YELLOW", "GREEN", "BLUE", "INDIGO", "VIOLET", "ULTRAVIOLET"] as const;
@@ -121,7 +122,7 @@ function emailLooksValid(value: string) {
 }
 
 export function CommunicationsPanel({ room }: { room: string }) {
-  const [gmKey, setGmKey] = useState("");
+  const { gmKey, setGmKey, rememberGmKey, sessionReady, restoredFromSession } = useGmSession();
   const [citizens, setCitizens] = useState<Citizen[]>(() => [1, 2, 3, 4].map(defaultCitizen));
   const [unlocked, setUnlocked] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -134,6 +135,7 @@ export function CommunicationsPanel({ room }: { room: string }) {
   const [subject, setSubject] = useState(PRESETS.secret_assignment.subject);
   const [body, setBody] = useState(PRESETS.secret_assignment.body);
   const [includeResponse, setIncludeResponse] = useState(true);
+  const autoUnlockAttemptedRef = useRef(false);
 
   const authorizedFetch = useCallback(async (payload: Record<string, unknown>, endpoint = "/api/roster") => {
     const response = await fetch(endpoint, {
@@ -186,13 +188,20 @@ export function CommunicationsPanel({ room }: { room: string }) {
       setUnlocked(true);
       setStatus(`PARANOIA XP CITIZEN DIRECTORY UNLOCKED · ${rows.length} SAVED / ${MAX_CITIZENS} MAX`);
       await loadNotices();
+      rememberGmKey();
     } catch (reason) {
       setUnlocked(false);
       setError(reason instanceof Error ? reason.message : "Unable to unlock citizen directory.");
     } finally {
       setBusy(false);
     }
-  }, [authorizedFetch, gmKey, loadNotices, recipientSeat, room]);
+  }, [authorizedFetch, gmKey, loadNotices, recipientSeat, rememberGmKey, room]);
+
+  useEffect(() => {
+    if (!sessionReady || !restoredFromSession || !gmKey.trim() || autoUnlockAttemptedRef.current) return;
+    autoUnlockAttemptedRef.current = true;
+    void loadDirectory();
+  }, [gmKey, loadDirectory, restoredFromSession, sessionReady]);
 
   const updateCitizen = (seat: number, patch: Partial<Citizen>) => {
     setCitizens((current) => current.map((citizen) => citizen.seat === seat ? { ...citizen, ...patch } : citizen));

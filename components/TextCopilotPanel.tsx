@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PLAYER_PRESETS, type FriendCommand } from "@/lib/friend-computer";
+import { useGmSession } from "@/lib/gm-session";
 import { createCommandBus, type CommandBus, type RoomPresence } from "@/lib/transport";
 
 const PLAYER_STORAGE_KEY = "friend-computer-v2:player-names:v1";
@@ -91,7 +92,7 @@ export function TextCopilotPanel({ room }: { room: string }) {
   const [transport, setTransport] = useState<CommandBus["transport"]>("connecting");
   const [presence, setPresence] = useState<RoomPresence>({ displays: 0, controls: 0 });
   const [playerNames, setPlayerNames] = useState<string[]>(() => PLAYER_PRESETS.map((preset) => preset.label));
-  const [gmKey, setGmKey] = useState("");
+  const { gmKey, setGmKey, rememberGmKey } = useGmSession();
   const [prompt, setPrompt] = useState("");
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [pending, setPending] = useState<Proposal | null>(null);
@@ -155,6 +156,7 @@ export function TextCopilotPanel({ room }: { room: string }) {
       });
       const data = (await response.json()) as CopilotResponse;
       if (!response.ok || !data.reply) throw new Error(data.error || "Friend Computer declined to answer.");
+      rememberGmKey();
 
       if (data.model) setModel(data.model);
       const additions: HistoryItem[] = [
@@ -173,7 +175,7 @@ export function TextCopilotPanel({ room }: { room: string }) {
     } finally {
       setLoading(false);
     }
-  }, [autoSpeak, gmKey, history, loading, playerNames, room, sendSpeech]);
+  }, [autoSpeak, gmKey, history, loading, playerNames, rememberGmKey, room, sendSpeech]);
 
   const askComputer = useCallback(async () => {
     await submitPrompt(prompt);
@@ -203,6 +205,7 @@ export function TextCopilotPanel({ room }: { room: string }) {
       });
       const data = (await response.json()) as { ok?: boolean; error?: string };
       if (!response.ok || !data.ok) throw new Error(data.error || "Alpha Complex refused to deliver the notice.");
+      rememberGmKey();
       setNoticeStatus(`NOTICE SENT TO ${pendingNotice.citizenId}`);
       setPendingNotice(null);
     } catch (reason) {
@@ -210,7 +213,7 @@ export function TextCopilotPanel({ room }: { room: string }) {
     } finally {
       setNoticeSending(false);
     }
-  }, [gmKey, noticeSending, pendingNotice, room]);
+  }, [gmKey, noticeSending, pendingNotice, rememberGmKey, room]);
 
   const transcribeRecording = useCallback(async (blob: Blob, mimeType: string) => {
     if (!blob.size || !gmKey.trim()) return;
@@ -231,6 +234,7 @@ export function TextCopilotPanel({ room }: { room: string }) {
       });
       const data = (await response.json()) as TranscribeResponse;
       if (!response.ok || !data.text) throw new Error(data.error || "Friend Computer could not transcribe that recording.");
+      rememberGmKey();
 
       transcript = data.text.trim();
       if (data.model) setTranscriptionModel(data.model);
@@ -243,7 +247,7 @@ export function TextCopilotPanel({ room }: { room: string }) {
     }
 
     if (transcript) await submitPrompt(transcript);
-  }, [gmKey, playerNames, submitPrompt]);
+  }, [gmKey, playerNames, rememberGmKey, submitPrompt]);
 
   const stopListening = useCallback(() => {
     listenHeldRef.current = false;

@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { useGmSession } from "@/lib/gm-session";
 
 type InviteMode = "display" | "join";
 
 export function DeviceInvitePanel({ room }: { room: string }) {
   const [open, setOpen] = useState(false);
-  const [gmKey, setGmKey] = useState("");
+  const { gmKey, setGmKey, rememberGmKey } = useGmSession();
   const [email, setEmail] = useState("");
   const [mode, setMode] = useState<InviteMode>("display");
   const [busy, setBusy] = useState(false);
@@ -29,6 +30,7 @@ export function DeviceInvitePanel({ room }: { room: string }) {
       });
       const data = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(data.error || "Device invitation failed.");
+      rememberGmKey();
       setStatus(`INVITATION SENT · ${mode === "display" ? "DISPLAY TERMINAL" : "GM JOIN MENU"}`);
       setEmail("");
     } catch (reason) {

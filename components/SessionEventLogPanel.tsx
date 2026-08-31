@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useGmSession } from "@/lib/gm-session";
 
 const MAX_CITIZENS = 16;
 const CATEGORIES = ["GENERAL", "MISSION", "DISCOVERY", "ACCUSATION", "CLONE", "NPC", "EQUIPMENT", "SECRET_ORDER", "DEBRIEF"] as const;
@@ -44,7 +45,7 @@ function eventColor(event: SessionEvent) {
 }
 
 export function SessionEventLogPanel({ room }: { room: string }) {
-  const [gmKey, setGmKey] = useState("");
+  const { gmKey, setGmKey, rememberGmKey, sessionReady, restoredFromSession } = useGmSession();
   const [unlocked, setUnlocked] = useState(false);
   const [events, setEvents] = useState<SessionEvent[]>([]);
   const [category, setCategory] = useState<Category>("GENERAL");
@@ -57,6 +58,7 @@ export function SessionEventLogPanel({ room }: { room: string }) {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const autoUnlockAttemptedRef = useRef(false);
 
   const authorizedFetch = useCallback(async (payload: Record<string, unknown>) => {
     const response = await fetch("/api/session-events", {
@@ -81,13 +83,20 @@ export function SessionEventLogPanel({ room }: { room: string }) {
       const data = await authorizedFetch({ action: "list", room, limit: 100 });
       setEvents(Array.isArray(data.events) ? data.events as SessionEvent[] : []);
       setUnlocked(true);
+      rememberGmKey();
       setStatus("SESSION MEMORY ONLINE");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to load session log.");
     } finally {
       setBusy(false);
     }
-  }, [authorizedFetch, gmKey, room]);
+  }, [authorizedFetch, gmKey, rememberGmKey, room]);
+
+  useEffect(() => {
+    if (!sessionReady || !restoredFromSession || !gmKey.trim() || autoUnlockAttemptedRef.current) return;
+    autoUnlockAttemptedRef.current = true;
+    void loadEvents();
+  }, [gmKey, loadEvents, restoredFromSession, sessionReady]);
 
   const addEvent = useCallback(async () => {
     if (!title.trim()) return;

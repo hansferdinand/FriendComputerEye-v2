@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useGmSession } from "@/lib/gm-session";
 
 const STATUSES = ["PLANNING", "ACTIVE", "PAUSED", "COMPLETE"] as const;
 type SessionStatus = (typeof STATUSES)[number];
@@ -31,12 +32,13 @@ function emptyContext(): SessionContext {
 }
 
 export function SessionContextPanel({ room }: { room: string }) {
-  const [gmKey, setGmKey] = useState("");
+  const { gmKey, setGmKey, rememberGmKey, sessionReady, restoredFromSession } = useGmSession();
   const [context, setContext] = useState<SessionContext>(emptyContext);
   const [unlocked, setUnlocked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const [error, setError] = useState("");
+  const autoUnlockAttemptedRef = useRef(false);
 
   const authorizedFetch = useCallback(async (payload: Record<string, unknown>) => {
     const response = await fetch("/api/session-context", {
@@ -73,13 +75,20 @@ export function SessionContextPanel({ room }: { room: string }) {
         updatedAt: row.updated_at ? String(row.updated_at) : null,
       });
       setUnlocked(true);
+      rememberGmKey();
       setStatusMessage("PERSISTENT SESSION CONTEXT LOADED");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to load session context.");
     } finally {
       setBusy(false);
     }
-  }, [authorizedFetch, gmKey, room]);
+  }, [authorizedFetch, gmKey, rememberGmKey, room]);
+
+  useEffect(() => {
+    if (!sessionReady || !restoredFromSession || !gmKey.trim() || autoUnlockAttemptedRef.current) return;
+    autoUnlockAttemptedRef.current = true;
+    void loadContext();
+  }, [gmKey, loadContext, restoredFromSession, sessionReady]);
 
   const saveContext = useCallback(async () => {
     setBusy(true);

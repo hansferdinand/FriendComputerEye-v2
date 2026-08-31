@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useGmSession } from "@/lib/gm-session";
 import { createCommandBus, type CommandBus, type RoomPresence } from "@/lib/transport";
 
 type CheckState = { ok: boolean; detail: string };
@@ -73,7 +74,7 @@ function StatusRow({ label, state, muted = false }: { label: string; state: Chec
 }
 
 export function ShowReadinessPanel({ room }: { room: string }) {
-  const [gmKey, setGmKey] = useState("");
+  const { gmKey, setGmKey, rememberGmKey, sessionReady, restoredFromSession } = useGmSession();
   const [transport, setTransport] = useState<CommandBus["transport"]>("connecting");
   const [presence, setPresence] = useState<RoomPresence>({ displays: 0, controls: 0, displayClients: [] });
   const [capabilities, setCapabilities] = useState<BrowserCapabilities | null>(null);
@@ -82,6 +83,7 @@ export function ShowReadinessPanel({ room }: { room: string }) {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
   const [serverMs, setServerMs] = useState<number | null>(null);
+  const autoCheckAttemptedRef = useRef(false);
 
   useEffect(() => {
     setCapabilities(detectCapabilities());
@@ -154,12 +156,19 @@ export function ShowReadinessPanel({ room }: { room: string }) {
       const data = (await serverResponse.json()) as ServerReadiness;
       if (!serverResponse.ok) throw new Error(data.error || "Show readiness check failed.");
       setServer(data);
+      rememberGmKey();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to complete show readiness check.");
     } finally {
       setRunning(false);
     }
-  }, [checkRoutes, gmKey, room]);
+  }, [checkRoutes, gmKey, rememberGmKey, room]);
+
+  useEffect(() => {
+    if (!sessionReady || !restoredFromSession || !gmKey.trim() || autoCheckAttemptedRef.current) return;
+    autoCheckAttemptedRef.current = true;
+    void runCheck();
+  }, [gmKey, restoredFromSession, runCheck, sessionReady]);
 
   const displayOnline = transport === "realtime" && presence.displays > 0;
   const displayClients = presence.displayClients ?? [];

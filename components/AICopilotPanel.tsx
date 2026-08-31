@@ -10,6 +10,7 @@ import {
   type FriendEffect,
   type ThreatLevel,
 } from "@/lib/friend-computer";
+import { useGmSession } from "@/lib/gm-session";
 
 type ConnectionState = "locked" | "connecting" | "connected" | "error";
 
@@ -65,7 +66,7 @@ function transcriptFromItem(item: Record<string, unknown>) {
 }
 
 export function AICopilotPanel({ room, playerNames, displayOnline, sendCommand }: Props) {
-  const [gmKey, setGmKey] = useState("");
+  const { gmKey, setGmKey, rememberGmKey } = useGmSession();
   const [connection, setConnection] = useState<ConnectionState>("locked");
   const [model, setModel] = useState("gpt-realtime-2.1");
   const [error, setError] = useState("");
@@ -284,6 +285,7 @@ export function AICopilotPanel({ room, playerNames, displayOnline, sendCommand }
       if (!tokenResponse.ok || !tokenData.value) {
         throw new Error(tokenData.error || "Friend Computer refused AI authorization.");
       }
+      rememberGmKey();
       if (tokenData.model) setModel(tokenData.model);
 
       const pc = new RTCPeerConnection();
@@ -333,7 +335,7 @@ export function AICopilotPanel({ room, playerNames, displayOnline, sendCommand }
       setConnection("error");
       setError(reason instanceof Error ? reason.message : "Unable to start Friend Computer AI.");
     }
-  }, [connection, disconnect, gmKey, handleEvent, playerNames, room]);
+  }, [connection, disconnect, gmKey, handleEvent, playerNames, rememberGmKey, room]);
 
   const toggleMic = useCallback(() => {
     const track = streamRef.current?.getAudioTracks()[0];

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ScenarioDirectorPanel } from "@/components/ScenarioDirectorPanel";
 import type { FriendCommand } from "@/lib/friend-computer";
+import { useGmSession } from "@/lib/gm-session";
 import {
   BUILT_IN_MISSION_PACKAGES,
   parseMissionPackageFile,
@@ -24,7 +25,7 @@ const IMPORTED_MISSIONS_STORAGE_KEY = "friend-computer-imported-missions:v1";
 const DEFAULT_MISSION_ID = BUILT_IN_MISSION_PACKAGES[0].id;
 
 export function MissionDirectorPanel({ room }: { room: string }) {
-  const [gmKey, setGmKey] = useState("");
+  const { gmKey, setGmKey, rememberGmKey, sessionReady, restoredFromSession } = useGmSession();
   const [unlocked, setUnlocked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [activeSceneId, setActiveSceneId] = useState<string | null>(null);
@@ -38,6 +39,7 @@ export function MissionDirectorPanel({ room }: { room: string }) {
   const lastCommandId = useRef<string | null>(null);
   const busRef = useRef<CommandBus | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const autoUnlockAttemptedRef = useRef(false);
 
   const missionPackages = useMemo(() => {
     const packages = new Map<string, DirectorMissionPackage>();
@@ -103,13 +105,20 @@ export function MissionDirectorPanel({ room }: { room: string }) {
       const matching = scenes.find((scene) => currentScene.startsWith(scene.title));
       setActiveSceneId(matching?.id ?? null);
       setUnlocked(true);
+      rememberGmKey();
       setStatusMessage("MISSION PACKAGE AUTHORIZED");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to authorize Mission Director.");
     } finally {
       setBusy(false);
     }
-  }, [activePackage, authorizedFetch, gmKey, missionPackages, room]);
+  }, [activePackage, authorizedFetch, gmKey, missionPackages, rememberGmKey, room]);
+
+  useEffect(() => {
+    if (!sessionReady || !restoredFromSession || !gmKey.trim() || autoUnlockAttemptedRef.current) return;
+    autoUnlockAttemptedRef.current = true;
+    void unlock();
+  }, [gmKey, restoredFromSession, sessionReady, unlock]);
 
   const activateScene = useCallback(async (scene: MissionScene) => {
     if (activePackage.director.type !== "scenes") return;
