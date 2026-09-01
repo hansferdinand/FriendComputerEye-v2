@@ -7,13 +7,18 @@ import type { FriendCommand } from "@/lib/friend-computer";
 import { useGmSession } from "@/lib/gm-session";
 import {
   BUILT_IN_MISSION_PACKAGES,
-  parseMissionPackageFile,
   parseMissionPackageText,
   type DirectorMissionPackage,
   type SceneMissionPackageFile,
 } from "@/lib/mission-package-format";
 import type { MissionCue, MissionScene } from "@/lib/mission-package";
+import {
+  downloadMissionFile,
+  loadImportedMissions,
+  storeImportedMissions,
+} from "@/lib/mission-library";
 import { STANDARD_PROJECTOR_PRESETS } from "@/lib/projector-presets";
+import { readStoredHandoffConfiguration } from "@/lib/gm-handoff";
 import { createSatiateSnapshot } from "@/lib/scenarios";
 import { createCommandBus, type CommandBus, type CommandReceipt, type RoomPresence } from "@/lib/transport";
 
@@ -21,7 +26,6 @@ function combinedContext(base: string, heading: string, addition: string) {
   return `${base}\n\n${heading}:\n${addition}`.slice(0, 4000);
 }
 
-const IMPORTED_MISSIONS_STORAGE_KEY = "friend-computer-imported-missions:v1";
 const DEFAULT_MISSION_ID = BUILT_IN_MISSION_PACKAGES[0].id;
 
 export function MissionDirectorPanel({ room }: { room: string }) {
@@ -48,17 +52,19 @@ export function MissionDirectorPanel({ room }: { room: string }) {
     return [...packages.values()];
   }, [importedPackages]);
   const activePackage = missionPackages.find((mission) => mission.id === packageId) ?? missionPackages[0];
+  const activePackageIsCustom = importedPackages.some((mission) => mission.id === activePackage.id);
+  const activePackageIsPortable = activePackage.director.type === "scenes";
 
   useEffect(() => {
     try {
-      const raw = window.localStorage.getItem(IMPORTED_MISSIONS_STORAGE_KEY);
-      const parsed = raw ? JSON.parse(raw) as unknown : [];
-      if (!Array.isArray(parsed)) return;
-      setImportedPackages(parsed.map(parseMissionPackageFile));
+      const imported = loadImportedMissions();
+      setImportedPackages(imported);
+      const preferredMissionId = readStoredHandoffConfiguration(room)?.missionId;
+      if (preferredMissionId && [...BUILT_IN_MISSION_PACKAGES, ...imported].some((mission) => mission.id === preferredMissionId)) setPackageId(preferredMissionId);
     } catch {
-      window.localStorage.removeItem(IMPORTED_MISSIONS_STORAGE_KEY);
+      setImportedPackages([]);
     }
-  }, []);
+  }, [room]);
 
   useEffect(() => {
     const onReceipt = (receipt: CommandReceipt) => {
@@ -221,11 +227,11 @@ export function MissionDirectorPanel({ room }: { room: string }) {
     try {
       const mission = parseMissionPackageText(await file.text());
       if (BUILT_IN_MISSION_PACKAGES.some((item) => item.id === mission.id)) throw new Error(`Mission id "${mission.id}" is reserved by a built-in package.`);
-      setImportedPackages((current) => {
-        const next = [...current.filter((item) => item.id !== mission.id), mission];
-        window.localStorage.setItem(IMPORTED_MISSIONS_STORAGE_KEY, JSON.stringify(next));
-        return next;
-      });
+      const existing = importedPackages.find((item) => item.id === mission.id);
+      if (existing && !window.confirm(`Replace the saved custom mission "${existing.title}" with this file?`)) return;
+      const next = [...importedPackages.filter((item) => item.id !== mission.id), mission];
+      storeImportedMissions(next);
+      setImportedPackages(next);
       setPackageId(mission.id);
       setActiveSceneId(null);
       sendDirectorCommand({ type: "exit-scenario" });
@@ -235,7 +241,59 @@ export function MissionDirectorPanel({ room }: { room: string }) {
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
-  }, [sendDirectorCommand]);
+  }, [importedPackages, sendDirectorCommand]);
+
+  const downloadMission = useCallback(() => {
+    setError("");
+    if (activePackage.director.type !== "scenes") {
+      setError("This specialized countdown mission cannot be exported as a portable Mission JSON v1 file yet.");
+      return;
+    }
+    downloadMissionFile(activePackage as SceneMissionPackageFile);
+    setStatusMessage(`${activePackage.title} EXPORTED · READY TO SHARE OR ARCHIVE`);
+  }, [activePackage]);
+
+  const duplicateMission = useCallback(() => {
+    setError("");
+    if (activePackage.director.type !== "scenes") {
+      setError("Specialized countdown missions cannot be duplicated into Mission JSON v1 yet.");
+      return;
+    }
+    const existingIds = new Set(missionPackages.map((mission) => mission.id));
+    const stem = `${activePackage.id.slice(0, 54)}-copy`;
+    let nextId = stem;
+    let suffix = 2;
+    while (existingIds.has(nextId)) {
+      const ending = `-${suffix}`;
+      nextId = `${stem.slice(0, 64 - ending.length)}${ending}`;
+      suffix += 1;
+    }
+    const duplicate: SceneMissionPackageFile = {
+      ...activePackage,
+      id: nextId,
+      title: `${activePackage.title} — COPY`,
+      director: { type: "scenes", scenes: activePackage.director.scenes },
+    };
+    const next = [...importedPackages, duplicate];
+    storeImportedMissions(next);
+    setImportedPackages(next);
+    setPackageId(duplicate.id);
+    setActiveSceneId(null);
+    setStatusMessage(`${duplicate.title} CREATED · SAVED ON THIS GM BROWSER`);
+  }, [activePackage, importedPackages, missionPackages]);
+
+  const removeCustomMission = useCallback(() => {
+    if (!activePackageIsCustom) return;
+    if (!window.confirm(`Remove the custom mission "${activePackage.title}" from this browser? Export it first if you need a backup.`)) return;
+    const next = importedPackages.filter((mission) => mission.id !== activePackage.id);
+    storeImportedMissions(next);
+    setImportedPackages(next);
+    setPackageId(DEFAULT_MISSION_ID);
+    setActiveSceneId(null);
+    sendDirectorCommand({ type: "exit-scenario" });
+    setError("");
+    setStatusMessage(`${activePackage.title} REMOVED · BUILT-IN MISSION RESTORED`);
+  }, [activePackage.id, activePackage.title, activePackageIsCustom, importedPackages, sendDirectorCommand]);
 
   const runProjectorPreset = useCallback((preset: (typeof STANDARD_PROJECTOR_PRESETS)[number]) => {
     sendDirectorCommand({ type: "show-projector-state", state: { kind: preset.id, startedAt: Date.now() } });
@@ -257,6 +315,9 @@ export function MissionDirectorPanel({ room }: { room: string }) {
           <h1>Mission Director</h1>
         </div>
         <div className="control-header-actions">
+          <Link className="display-link" href={`/rehearsal/${encodeURIComponent(room)}`}>REHEARSE MISSION</Link>
+          <Link className="display-link" href={`/importer/${encodeURIComponent(room)}`}>IMPORT STORY</Link>
+          <Link className="display-link" href={`/workshop/${encodeURIComponent(room)}`}>BUILD MISSION</Link>
           <Link className="display-link" href={`/control/${encodeURIComponent(room)}`}>MANUAL CONTROLS</Link>
           <Link className="display-link" href={`/copilot/${encodeURIComponent(room)}`}>AI COPILOT</Link>
           <Link className="display-link" href={`/session/${encodeURIComponent(room)}`}>MISSION CONTEXT</Link>
@@ -275,7 +336,9 @@ export function MissionDirectorPanel({ room }: { room: string }) {
           </label>
           <div className="mission-package-tools">
             <button type="button" onClick={() => fileInputRef.current?.click()}>LOAD MISSION JSON</button>
-            <span>{missionPackages.length} PACKAGE{missionPackages.length === 1 ? "" : "S"} AVAILABLE · CUSTOM FILES STAY ON THIS GM BROWSER</span>
+            <button type="button" disabled={!activePackageIsPortable} onClick={downloadMission}>DOWNLOAD MISSION</button>
+            <button type="button" disabled={!activePackageIsPortable} onClick={duplicateMission}>DUPLICATE AS CUSTOM</button>
+            {activePackageIsCustom ? <button type="button" className="danger" onClick={removeCustomMission}>REMOVE CUSTOM</button> : null}
             <input
               ref={fileInputRef}
               type="file"
@@ -283,6 +346,11 @@ export function MissionDirectorPanel({ room }: { room: string }) {
               hidden
               onChange={(event) => void importMission(event.target.files?.[0])}
             />
+          </div>
+          <div className="mission-library-summary">
+            <span>{missionPackages.length} MISSION{missionPackages.length === 1 ? "" : "S"} AVAILABLE</span>
+            <span>{activePackageIsCustom ? "CUSTOM · STORED ON THIS BROWSER" : "BUILT-IN · READ ONLY"}</span>
+            <span>{activePackage.director.type === "scenes" ? `${activePackage.director.scenes.length} SCENES · PORTABLE V1` : "SPECIALIZED COUNTDOWN ENGINE"}</span>
           </div>
           <p style={{ color: "#a8d7da", lineHeight: 1.5, marginTop: 12 }}>{activePackage.premise}</p>
           <div style={{ display: "grid", gridTemplateColumns: "minmax(220px,1fr) auto", gap: 10 }}>
@@ -303,8 +371,8 @@ export function MissionDirectorPanel({ room }: { room: string }) {
             <span style={{ color: "#7fa4a8" }}>TRANSPORT: {transport.toUpperCase()}</span>
             <span style={{ color: cueAck === "DISPLAY ACKNOWLEDGED" ? "#87f6fb" : "#b1a56b" }}>{cueAck}</span>
           </div>
-          {statusMessage ? <div style={{ marginTop: 10, color: "#87f6fb", fontSize: 12 }}>{statusMessage}</div> : null}
-          {error ? <div style={{ marginTop: 10, color: "#ff8d86", fontSize: 12 }}>{error}</div> : null}
+          {statusMessage ? <div role="status" style={{ marginTop: 10, color: "#87f6fb", fontSize: 12 }}>{statusMessage}</div> : null}
+          {error ? <div role="alert" style={{ marginTop: 10, color: "#ff8d86", fontSize: 12 }}>{error}</div> : null}
           <small style={{ display: "block", marginTop: 10, color: "#6e9499", lineHeight: 1.45 }}>
             {activePackage.director.type === "countdown"
               ? "Selecting this scenario configures the projector on a 90-minute hold. The timer starts only when the GM presses START. Scenario controls use the existing command bus and persistent Mission Context / Session Log."

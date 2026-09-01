@@ -4,6 +4,10 @@ Mission Director can load portable scene-and-cue missions without rebuilding or 
 
 Imported missions are validated before use and saved in the current GM browser. The projector receives only the selected cue commands; mission files cannot execute JavaScript or call arbitrary URLs.
 
+## Author with ChatGPT
+
+Use [`CHATGPT-AUTHORING.md`](./CHATGPT-AUTHORING.md) for the GM workflow. Attach [`CHATGPT-MISSION-PROMPT.md`](./CHATGPT-MISSION-PROMPT.md), this folder's schema, the example mission, and the source story to a new ChatGPT conversation. The prompt requires a reviewable scene plan before producing the final importable JSON.
+
 ## Required structure
 
 - `format`: always `friend-computer-mission`

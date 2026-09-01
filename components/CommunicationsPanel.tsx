@@ -319,6 +319,7 @@ export function CommunicationsPanel({ room }: { room: string }) {
       <header className="control-header">
         <div><span className="control-eyebrow">PARANOIA XP · ALPHA COMPLEX BUREAUCRATIC NETWORK</span><h1>Citizen Communications</h1></div>
         <div className="control-header-actions">
+          <Link className="display-link" href={`/messages/${encodeURIComponent(room)}`}>PRIVATE MESSAGING</Link>
           <Link className="display-link" href={`/control/${encodeURIComponent(room)}`}>MANUAL CONTROLS</Link>
           <Link className="display-link" href={`/mission/${encodeURIComponent(room)}`}>MISSION DIRECTOR</Link>
           <Link className="display-link" href={`/copilot/${encodeURIComponent(room)}`}>AI COPILOT</Link>

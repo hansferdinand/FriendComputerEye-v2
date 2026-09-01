@@ -289,6 +289,7 @@ export function FriendComputerDisplay({
           if (command.effect === "random-ad" || command.effect === "happy-ad") {
             const happyIndex = 2;
             const index = command.effect === "happy-ad" ? happyIndex : Math.floor(Math.random() * ADVERTISEMENTS.length);
+            setProjectorState(null);
             setGlitchNonce((value) => value + 1);
             setOverlay({ kind: "ad", index });
             clearOverlayLater(7800);

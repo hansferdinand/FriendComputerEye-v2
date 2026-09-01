@@ -25,8 +25,7 @@ import {
   type LoadingTimerState,
   type LoadingTimeUnit,
 } from "@/lib/loading-timer";
-
-const PLAYER_STORAGE_KEY = "friend-computer-v2:player-names:v1";
+import { CONTROL_PLAYER_NAMES_STORAGE_KEY, readStoredHandoffConfiguration, type HandoffSpeechPreset } from "@/lib/gm-handoff";
 
 const expressionLabels: Record<Expression, string> = {
   neutral: "Neutral",
@@ -131,6 +130,7 @@ export function ControlPanel({ room }: { room: string }) {
   const [loadingAmount, setLoadingAmount] = useState("10");
   const [loadingUnit, setLoadingUnit] = useState<LoadingTimeUnit>("years");
   const [activeLoadingTimer, setActiveLoadingTimer] = useState<LoadingTimerState | null>(null);
+  const [handoffSpeechPresets, setHandoffSpeechPresets] = useState<HandoffSpeechPreset[]>([]);
   const [loadedLoadingTimerRoom, setLoadedLoadingTimerRoom] = useState<string | null>(null);
   const [loadingError, setLoadingError] = useState("");
   const roomLabel = useMemo(() => room.toUpperCase(), [room]);
@@ -142,7 +142,7 @@ export function ControlPanel({ room }: { room: string }) {
 
   useEffect(() => {
     try {
-      const saved = JSON.parse(window.localStorage.getItem(PLAYER_STORAGE_KEY) ?? "null") as unknown;
+      const saved = JSON.parse(window.localStorage.getItem(CONTROL_PLAYER_NAMES_STORAGE_KEY) ?? "null") as unknown;
       if (Array.isArray(saved) && saved.length === PLAYER_PRESETS.length && saved.every((item) => typeof item === "string")) {
         setPlayerNames(saved);
       }
@@ -153,11 +153,15 @@ export function ControlPanel({ room }: { room: string }) {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(PLAYER_STORAGE_KEY, JSON.stringify(playerNames));
+      window.localStorage.setItem(CONTROL_PLAYER_NAMES_STORAGE_KEY, JSON.stringify(playerNames));
     } catch {
       // Player labels are a convenience, never a show-critical dependency.
     }
   }, [playerNames]);
+
+  useEffect(() => {
+    setHandoffSpeechPresets(readStoredHandoffConfiguration(room)?.presets.speech ?? []);
+  }, [room]);
 
   useEffect(() => {
     try {
@@ -475,6 +479,12 @@ export function ControlPanel({ room }: { room: string }) {
             placeholder="Citizen, your continued survival indicates that Friend Computer has been extremely generous..."
           />
           <button type="button" className="primary-action" onClick={speak}>SPEAK</button>
+          {handoffSpeechPresets.length ? (
+            <details className="handoff-speech-presets">
+              <summary>HANDOFF SPEECH PRESETS · {handoffSpeechPresets.length}</summary>
+              <div>{handoffSpeechPresets.map((preset) => <button type="button" key={preset.id} onClick={() => setSpeech(preset.text)}>{preset.label}</button>)}</div>
+            </details>
+          ) : null}
         </section>
 
         <section className="panel panel--status">
