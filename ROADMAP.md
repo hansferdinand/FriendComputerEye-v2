@@ -15,6 +15,7 @@ The next game is approximately one month away. The recommended milestone is **Pa
 - **Built locally:** Story Importer for pasted text and `.txt` / `.md` files, with secured structured AI conversion, a local Markdown fallback, source separation, scene/cue regeneration, unsupported-mechanics detection, explicit per-scene approval, and Workshop handoff.
 - **Built locally:** versioned GM Handoff Package export/import with SHA-256 validation, safe roster labels, mission and Workshop restore, preset sharing, display/audio recommendations, handout manifest, paused rehearsal recovery, selective target-room import, and explicit credential exclusions.
 - **Built locally:** identity-scoped private messaging with disclosed privacy rules, revocable 30-day participant links, encrypted message bodies, unread state, GM quick replies, configurable retention, optional player-to-player channels that remain unreadable through the GM RPC, and mobile-first inboxes.
+- **Built locally:** private Mission Author MCP and shareable AI-client plugin with current schema/example access, structured validation, human-approved draft delivery, a GM-authenticated Workshop inbox, and no access to live-game controls.
 
 ## Success criteria for the next game
 

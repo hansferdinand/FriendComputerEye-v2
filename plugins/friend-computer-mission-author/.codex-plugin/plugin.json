@@ -1,0 +1,24 @@
+{
+  "name": "friend-computer-mission-author",
+  "version": "1.0.0",
+  "description": "Plan, validate, and hand off Friend Computer tabletop missions to the Mission Workshop.",
+  "author": {
+    "name": "Friend Computer Eye"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Friend Computer Mission Author",
+    "shortDescription": "Turn a story into a review-ready Friend Computer mission.",
+    "longDescription": "Guides a GM through story planning, validates Mission JSON v1, and safely sends approved drafts to the Friend Computer Mission Workshop inbox without touching live game controls.",
+    "developerName": "Friend Computer Eye",
+    "category": "Creative",
+    "capabilities": ["Interactive", "Write"],
+    "defaultPrompt": [
+      "Turn my story into a Friend Computer mission.",
+      "Validate this mission and explain what needs fixing.",
+      "Save my approved mission draft to room alpha."
+    ],
+    "brandColor": "#E1262F"
+  },
+  "mcpServers": "./.mcp.json"
+}

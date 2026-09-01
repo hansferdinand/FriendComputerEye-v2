@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "friend-computer-mission-author": {
+      "type": "http",
+      "url": "https://www.alphacomplex.space/api/mcp",
+      "bearer_token_env_var": "FRIEND_COMPUTER_MCP_TOKEN"
+    }
+  }
+}

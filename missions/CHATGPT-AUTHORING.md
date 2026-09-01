@@ -2,6 +2,19 @@
 
 This guide lets a GM turn a story outline or complete adventure into a file that the current Mission Director can import.
 
+## Easier option: use the private Mission Author connection
+
+When ChatGPT or another AI client is connected to the Friend Computer Mission Author MCP, it can fetch the current guide, schema, and example automatically. Ask it to plan the mission first, validate the approved draft, and then send that draft to the Workshop inbox for your room.
+
+The connection is intentionally review-first:
+
+1. The author and ChatGPT agree on a scene plan.
+2. ChatGPT generates and validates the mission.
+3. ChatGPT calls `save_mission_draft` only after the author explicitly asks it to send the approved draft.
+4. The GM opens `/workshop/[room]`, checks **ChatGPT Draft Inbox**, loads the draft, reviews it, and separately saves it to the Mission Library.
+
+The MCP cannot control the live projector or any live-game system. If the connection is unavailable, use the manual file workflow below.
+
 ## What you need
 
 Give ChatGPT these files from the repository:

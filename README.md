@@ -88,6 +88,16 @@ Planning and authoring resources:
 - [`missions/example.mission.json`](./missions/example.mission.json) — the smallest practical mission example.
 - [`missions/friend-computer-mission.schema.json`](./missions/friend-computer-mission.schema.json) — the authoritative Friend Computer Mission JSON v1 schema.
 
+### Mission Author MCP
+
+The private authoring MCP at `https://www.alphacomplex.space/api/mcp` lets an approved AI client read the current authoring guide, schema, and example; validate a mission; and send a human-approved draft to the room's Mission Workshop inbox.
+
+- The server requires `Authorization: Bearer <FRIEND_COMPUTER_MCP_TOKEN>`.
+- It exposes authoring and draft-transfer tools only. It cannot operate displays, speech, timers, messages, or live-game controls.
+- Saving a draft never publishes it or changes the active mission. A GM must open `/workshop/[room]`, authenticate, review the draft, and deliberately save it to the local Mission Library.
+- The shareable plugin source is in [`plugins/friend-computer-mission-author`](./plugins/friend-computer-mission-author).
+- Keep the MCP token private. Rotate the Vercel environment variable if a copy is lost or shared with the wrong person.
+
 ### 90 Minutes to Treason
 
 The `90-minutes-to-treason` package adds a show-safe SATIATE-7 runtime:

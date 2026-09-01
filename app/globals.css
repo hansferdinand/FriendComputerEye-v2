@@ -914,6 +914,11 @@ button { touch-action: manipulation; }
 .workshop-saved { color: #87f6fb; }
 .workshop-dirty { color: #ffd17a; }
 .workshop-status { margin: 12px 0; padding: 9px; border-left: 3px solid #48f6ff; color: #9cf5f8; background: rgba(72,246,255,.055); font-size: 10px; line-height: 1.45; }
+.workshop-inbox-list { display: grid; gap: 7px; margin: 10px 0; }
+.workshop-inbox-draft { display: grid; gap: 8px; padding: 9px; border: 1px solid #245258; background: rgba(72,246,255,.035); }
+.workshop-inbox-draft > div { display: grid; gap: 3px; min-width: 0; }
+.workshop-inbox-draft strong { color: #b9fbfd; font-size: 10px; overflow-wrap: anywhere; }
+.workshop-inbox-draft small { color: #6e9499; font-size: 8px; line-height: 1.4; }
 .workshop-validation { margin: 12px 0; padding: 10px; border: 1px solid #85322d; color: #ff9e97; background: #130706; font-size: 10px; line-height: 1.45; }
 .workshop-validation strong { letter-spacing: .08em; }
 .workshop-validation ol { margin: 8px 0 0; padding-left: 19px; }

@@ -8,6 +8,8 @@ Imported missions are validated before use and saved in the current GM browser. 
 
 Use [`CHATGPT-AUTHORING.md`](./CHATGPT-AUTHORING.md) for the GM workflow. Attach [`CHATGPT-MISSION-PROMPT.md`](./CHATGPT-MISSION-PROMPT.md), this folder's schema, the example mission, and the source story to a new ChatGPT conversation. The prompt requires a reviewable scene plan before producing the final importable JSON.
 
+An approved client can instead connect to the private Mission Author MCP. It supplies these authoring resources as tools, validates the result, and can send an explicitly approved draft to the Workshop inbox without activating it.
+
 ## Required structure
 
 - `format`: always `friend-computer-mission`

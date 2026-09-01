@@ -26,6 +26,7 @@ import {
 } from "@/lib/mission-library";
 import type { MissionCue, MissionScene } from "@/lib/mission-package";
 import { createCommandBus, type CommandBus, type RoomPresence } from "@/lib/transport";
+import { useGmSession } from "@/lib/gm-session";
 
 const LOG_CATEGORIES = ["MISSION", "DISCOVERY", "ACCUSATION", "CLONE", "NPC", "EQUIPMENT", "SECRET_ORDER", "DEBRIEF", "GENERAL"] as const;
 const LOG_VISIBILITIES = ["COMPUTER", "GM_ONLY"] as const;
@@ -37,6 +38,14 @@ const PORTABLE_BUILT_INS = BUILT_IN_MISSION_PACKAGES.filter(
 
 type MetadataField = (typeof METADATA_FIELDS)[number];
 type CueLog = NonNullable<MissionCue["log"]>;
+type RemoteMissionDraft = {
+  id: string;
+  missionId: string;
+  title: string;
+  createdBy: string;
+  createdAt: string;
+  mission: SceneMissionPackageFile;
+};
 
 function uniqueId(base: string, existing: Iterable<string>) {
   const ids = new Set(existing);
@@ -180,8 +189,12 @@ function editableBuiltInCopy(source: SceneMissionPackageFile, existingIds: strin
 }
 
 export function MissionWorkshopPanel({ room }: { room: string }) {
+  const { gmKey, setGmKey, rememberGmKey, sessionReady, restoredFromSession } = useGmSession();
   const [draft, setDraft] = useState<SceneMissionPackageFile>(() => createBlankMission(room));
   const [importedMissions, setImportedMissions] = useState<SceneMissionPackageFile[]>([]);
+  const [remoteDrafts, setRemoteDrafts] = useState<RemoteMissionDraft[]>([]);
+  const [inboxBusy, setInboxBusy] = useState(false);
+  const [inboxUnlocked, setInboxUnlocked] = useState(false);
   const [sourceId, setSourceId] = useState(PORTABLE_BUILT_INS[0]?.id ?? "");
   const [ready, setReady] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
@@ -190,6 +203,7 @@ export function MissionWorkshopPanel({ room }: { room: string }) {
   const [transport, setTransport] = useState<CommandBus["transport"]>("connecting");
   const [presence, setPresence] = useState<RoomPresence>({ displays: 0, controls: 0, displayClients: [] });
   const busRef = useRef<CommandBus | null>(null);
+  const autoInboxAttemptedRef = useRef(false);
 
   const sources = useMemo(() => [...PORTABLE_BUILT_INS, ...importedMissions], [importedMissions]);
   const draftSignature = useMemo(() => JSON.stringify(draft), [draft]);
@@ -232,6 +246,37 @@ export function MissionWorkshopPanel({ room }: { room: string }) {
       busRef.current = null;
     };
   }, [room]);
+
+  const loadRemoteDrafts = useCallback(async () => {
+    if (!gmKey.trim() || inboxBusy) return;
+    setInboxBusy(true);
+    try {
+      const response = await fetch(`/api/mission-drafts?room=${encodeURIComponent(room)}`, {
+        headers: { "x-friend-computer-gm-key": gmKey },
+        cache: "no-store",
+      });
+      const payload = await response.json() as { drafts?: RemoteMissionDraft[]; error?: string };
+      if (!response.ok) throw new Error(payload.error || "Draft inbox could not be opened.");
+      const drafts = Array.isArray(payload.drafts) ? payload.drafts : [];
+      setRemoteDrafts(drafts);
+      setInboxUnlocked(true);
+      rememberGmKey();
+      setStatusMessage(drafts.length
+        ? `${drafts.length} CHATGPT DRAFT${drafts.length === 1 ? "" : "S"} WAITING IN THE WORKSHOP INBOX`
+        : "CHATGPT DRAFT INBOX CHECKED · NOTHING WAITING");
+    } catch (reason) {
+      setInboxUnlocked(false);
+      setStatusMessage(reason instanceof Error ? reason.message.toUpperCase() : "CHATGPT DRAFT INBOX UNAVAILABLE");
+    } finally {
+      setInboxBusy(false);
+    }
+  }, [gmKey, inboxBusy, rememberGmKey, room]);
+
+  useEffect(() => {
+    if (!sessionReady || !restoredFromSession || !gmKey.trim() || autoInboxAttemptedRef.current) return;
+    autoInboxAttemptedRef.current = true;
+    void loadRemoteDrafts();
+  }, [gmKey, loadRemoteDrafts, restoredFromSession, sessionReady]);
 
   const setMetadata = useCallback((field: MetadataField, value: string) => {
     setDraft((current) => ({ ...current, [field]: value }));
@@ -354,6 +399,26 @@ export function MissionWorkshopPanel({ room }: { room: string }) {
     setStatusMessage(isBuiltIn ? "BUILT-IN MISSION COPIED INTO A NEW CUSTOM DRAFT" : `${next.title} LOADED FOR EDITING`);
   }, [dirty, sourceId, sources]);
 
+  const loadRemoteDraft = useCallback(async (remote: RemoteMissionDraft) => {
+    if (dirty && !window.confirm("Load this ChatGPT draft into the workshop? The current workshop draft will be replaced.")) return;
+    const next = cloneMission(remote.mission);
+    setDraft(next);
+    setSavedSignature(null);
+    setValidationIssues([]);
+    setStatusMessage(`${next.title} LOADED FROM THE CHATGPT DRAFT INBOX · REVIEW BEFORE SAVING`);
+
+    try {
+      const response = await fetch(`/api/mission-drafts?room=${encodeURIComponent(room)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "x-friend-computer-gm-key": gmKey },
+        body: JSON.stringify({ draftId: remote.id }),
+      });
+      if (response.ok) setRemoteDrafts((current) => current.filter((item) => item.id !== remote.id));
+    } catch {
+      // The draft is already loaded locally; leaving it in the inbox is recoverable.
+    }
+  }, [dirty, gmKey, room]);
+
   const validate = useCallback(() => {
     const issues = validateDraft(draft);
     setValidationIssues(issues);
@@ -455,6 +520,29 @@ export function MissionWorkshopPanel({ room }: { room: string }) {
             <span className={dirty ? "workshop-dirty" : "workshop-saved"}>{dirty ? "UNSAVED LIBRARY CHANGES" : "SAVED TO LIBRARY"}</span>
             <span className={displayOnline ? "workshop-saved" : "workshop-muted"}>{displayOnline ? `${presence.displays} DISPLAY ONLINE` : `DISPLAY ${transport.toUpperCase()}`}</span>
           </div>
+
+          <div className="panel-heading workshop-actions-heading"><span>AI</span><h2>ChatGPT Draft Inbox</h2></div>
+          <p className="workshop-muted">Approved missions sent through the Mission Author plugin wait here for GM review. Loading one never changes the live game.</p>
+          <label className="workshop-field">
+            <span>GM AUTHORIZATION · USED ONLY TO OPEN THIS ROOM&apos;S INBOX</span>
+            <input type="password" autoComplete="off" value={gmKey} onChange={(event) => setGmKey(event.target.value)} placeholder={sessionReady && restoredFromSession ? "Restored from this browser tab" : "GM AI passphrase"} />
+          </label>
+          <div className="workshop-stack">
+            <button type="button" disabled={inboxBusy || !gmKey.trim()} onClick={() => void loadRemoteDrafts()}>{inboxBusy ? "CHECKING INBOX…" : "CHECK CHATGPT INBOX"}</button>
+          </div>
+          {remoteDrafts.length ? (
+            <div className="workshop-inbox-list">
+              {remoteDrafts.map((remote) => (
+                <article key={remote.id} className="workshop-inbox-draft">
+                  <div>
+                    <strong>{remote.title}</strong>
+                    <small>{remote.createdBy} · {new Date(remote.createdAt).toLocaleString()}</small>
+                  </div>
+                  <button type="button" onClick={() => void loadRemoteDraft(remote)}>LOAD DRAFT</button>
+                </article>
+              ))}
+            </div>
+          ) : inboxUnlocked ? <div className="workshop-empty">No pending ChatGPT drafts for room {room}.</div> : null}
 
           <div className="panel-heading workshop-actions-heading"><span>CHK</span><h2>Validate & Save</h2></div>
           <div className="workshop-stack">
