@@ -83,7 +83,7 @@ Planning and authoring resources:
 - [`missions/CHATGPT-MISSION-PROMPT.md`](./missions/CHATGPT-MISSION-PROMPT.md) — the reusable authoring instructions to attach to a ChatGPT conversation.
 - `/importer/[room]` — review-first Story Importer for pasted text and `.txt` / `.md` files; AI conversion is optional and local Markdown outlining remains available.
 - `/handoff/[room]` — create and verify credential-safe GM Handoff JSON packages, preview every imported category, and restore selected items into a new room.
-- `/messages/[room]` — GM private-messaging console with revocable player inbox links, unread states, retention controls, quick replies, and optional player-to-player channels.
+- `/messages/[room]` — GM private-messaging console with revocable player inbox links, unread states, retention controls, quick replies, and disclosed GM visibility across optional player-to-player channels.
 - `/inbox/[token]` — mobile-first participant inbox; links are private capability credentials and should be shared only with their intended player.
 - [`missions/example.mission.json`](./missions/example.mission.json) — the smallest practical mission example.
 - [`missions/friend-computer-mission.schema.json`](./missions/friend-computer-mission.schema.json) — the authoritative Friend Computer Mission JSON v1 schema.

@@ -41,7 +41,7 @@ const TOOL_GROUPS: ToolGroup[] = [
   {
     label: "COMMUNICATIONS",
     tools: [
-      { route: "messages", label: "Private Messaging", description: "Open GM-to-player channels, create inbox links, and manage privacy controls." },
+      { route: "messages", label: "Private Messaging", description: "Open GM-to-player channels, review table traffic, and create inbox links." },
       { route: "communications", label: "Citizen Communications", description: "Manage citizens, notices, invitations, and player contact." },
     ],
   },

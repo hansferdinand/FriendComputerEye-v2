@@ -165,7 +165,9 @@ button { touch-action: manipulation; }
 .message-feed { display: flex; flex-direction: column; gap: 9px; min-height: 330px; max-height: 430px; padding: 16px; overflow-y: auto; background: radial-gradient(circle at 50% 0, rgba(25, 87, 91, .1), transparent 55%), #010405; }
 .message-bubble { align-self: flex-start; width: min(78%, 680px); padding: 10px 12px; border: 1px solid #304445; background: #0a0e0f; }
 .message-bubble--outgoing { align-self: flex-end; border-color: #24686d; background: #061718; }
+.message-bubble--observed { border-color: #6a5c2f; background: #151205; }
 .message-bubble strong { color: #89d9dd; font-size: 9px; letter-spacing: .09em; }
+.message-bubble--observed strong { color: #dbc66f; }
 .message-bubble p { margin: 7px 0; color: #c9e6e8; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
 .message-bubble small { color: #587b7d; font-size: 8px; }
 .message-empty { margin: auto; padding: 28px; color: #617f82; text-align: center; line-height: 1.5; }

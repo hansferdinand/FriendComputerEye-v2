@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
         p_allow_player_to_player: body.allowPlayerToPlayer === true,
         p_retention_hours: retentionHours,
       });
-      if (error || data !== true) return json({ error: "Unable to save messaging privacy settings." }, 502);
+      if (error || data !== true) return json({ error: "Unable to save messaging settings." }, 502);
       return json({ ok: true });
     }
 

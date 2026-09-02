@@ -154,8 +154,8 @@ export function PlayerInboxPanel({ token }: { token: string }) {
       </header>
 
       <div className="player-inbox-policy">
-        <strong>PRIVACY NOTICE</strong>
-        <span>GM messages are visible to you and the GM. Direct Citizen messages are not visible in the GM inbox. Messages auto-delete after {Math.round(identity.retention_hours / 24)} day(s).</span>
+        <strong>TABLE VISIBILITY NOTICE</strong>
+        <span>Every message sent through this table app is visible to the GM. Direct Citizen messages remain visible only to the sender, recipient, and GM. Messages auto-delete after {Math.round(identity.retention_hours / 24)} day(s).</span>
       </div>
       {error ? <div className="player-inbox-error" role="alert">{error}</div> : null}
 

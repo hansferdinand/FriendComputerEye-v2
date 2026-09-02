@@ -14,7 +14,7 @@ The next game is approximately one month away. The recommended milestone is **Pa
 - **Built locally:** rehearsal mode with an embedded simulated projector, room-scoped isolation banner, cue and scene checklist, specialized countdown practice, accelerated timers, clean reset, and pre-show readiness handoff.
 - **Built locally:** Story Importer for pasted text and `.txt` / `.md` files, with secured structured AI conversion, a local Markdown fallback, source separation, scene/cue regeneration, unsupported-mechanics detection, explicit per-scene approval, and Workshop handoff.
 - **Built locally:** versioned GM Handoff Package export/import with SHA-256 validation, safe roster labels, mission and Workshop restore, preset sharing, display/audio recommendations, handout manifest, paused rehearsal recovery, selective target-room import, and explicit credential exclusions.
-- **Built locally:** identity-scoped private messaging with disclosed privacy rules, revocable 30-day participant links, encrypted message bodies, unread state, GM quick replies, configurable retention, optional player-to-player channels that remain unreadable through the GM RPC, and mobile-first inboxes.
+- **Built locally:** identity-scoped private messaging with disclosed GM visibility across all table traffic, revocable 30-day participant links, encrypted message bodies, unread state, GM quick replies, configurable retention, optional player-to-player channels, and mobile-first inboxes.
 - **Built locally:** private Mission Author MCP and shareable AI-client plugin with current schema/example access, structured validation, human-approved draft delivery, a GM-authenticated Workshop inbox, and no access to live-game controls.
 
 ## Success criteria for the next game
@@ -143,8 +143,8 @@ Import must show exactly what will be changed and allow the receiving GM to choo
 
 ### Privacy and access requirements
 
-- “Private” must have an explicit product meaning. The recommended default is that only sender and recipient can read a direct message; do not give the GM silent access to player-to-player messages.
-- If a game intentionally allows GM oversight, disclose that room policy to every participant before messaging begins.
+- “Private” means a message is limited to its sender, recipient, and the GM; other players cannot read it.
+- GM oversight is always on and must be disclosed to every participant before messaging begins.
 - Use participant invite tokens or authenticated room identities rather than trusting a display name or room code alone.
 - Enforce message access on the server, not only by hiding UI controls.
 - Provide configurable session retention and a clear **Delete Session Messages** action.

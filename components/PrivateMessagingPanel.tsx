@@ -49,6 +49,12 @@ function relativeTime(value: string | null) {
   return `${Math.floor(hours / 24)}D AGO`;
 }
 
+function deliveryState(message: DirectMessage, observedPlayerTraffic: boolean) {
+  if (message.sender_kind === "gm") return message.read_at ? "READ" : "SENT";
+  if (observedPlayerTraffic) return message.read_at ? "RECIPIENT READ" : "RECIPIENT UNREAD";
+  return "RECEIVED";
+}
+
 export function PrivateMessagingPanel({ room }: { room: string }) {
   const { gmKey, setGmKey, rememberGmKey, sessionReady, restoredFromSession } = useGmSession();
   const [unlocked, setUnlocked] = useState(false);
@@ -58,7 +64,7 @@ export function PrivateMessagingPanel({ room }: { room: string }) {
   const [settings, setSettings] = useState<MessageSettings>({
     allow_player_to_player: false,
     retention_hours: 168,
-    gm_can_read_player_to_player: false,
+    gm_can_read_player_to_player: true,
   });
   const [invites, setInvites] = useState<Invite[]>([]);
   const [messages, setMessages] = useState<DirectMessage[]>([]);
@@ -92,7 +98,7 @@ export function PrivateMessagingPanel({ room }: { room: string }) {
       setSettings((data.settings as MessageSettings | null) ?? {
         allow_player_to_player: false,
         retention_hours: 168,
-        gm_can_read_player_to_player: false,
+        gm_can_read_player_to_player: true,
       });
       setInvites(nextInvites);
       setMessages(Array.isArray(data.messages) ? data.messages as DirectMessage[] : []);
@@ -207,7 +213,7 @@ export function PrivateMessagingPanel({ room }: { room: string }) {
         allowPlayerToPlayer: next.allow_player_to_player,
         retentionHours: next.retention_hours,
       });
-      setStatus("MESSAGING PRIVACY SETTINGS SAVED");
+      setStatus("MESSAGING SETTINGS SAVED · GM VISIBILITY REMAINS ACTIVE");
     } catch (reason) {
       setSettings(settings);
       setError(reason instanceof Error ? reason.message : "Unable to save messaging settings.");
@@ -257,7 +263,7 @@ export function PrivateMessagingPanel({ room }: { room: string }) {
         <div>
           <span className="control-eyebrow">ALPHA COMPLEX · PRIVATE CHANNELS</span>
           <h1>Private Messaging</h1>
-          <p className="message-header-copy">Send private notes to players during the game. Citizen-to-Citizen traffic is optional and never appears in the GM inbox.</p>
+          <p className="message-header-copy">Send private notes to players and review all table messaging. Citizen-to-Citizen traffic is optional, disclosed to players, and always visible to the GM.</p>
         </div>
         <div className="control-header-actions">
           <Link className="display-link" href={`/communications/${encodeURIComponent(room)}`}>CITIZEN DIRECTORY</Link>
@@ -278,7 +284,7 @@ export function PrivateMessagingPanel({ room }: { room: string }) {
       {unlocked ? (
         <>
           <section className="panel message-policy">
-            <div className="panel-heading"><span>PRIV</span><h2>Privacy & Retention</h2></div>
+            <div className="panel-heading"><span>VIS</span><h2>Visibility & Retention</h2></div>
             <div className="message-policy-grid">
               <div>
                 <strong>GM ↔ CITIZEN</strong>
@@ -286,7 +292,7 @@ export function PrivateMessagingPanel({ room }: { room: string }) {
               </div>
               <div>
                 <strong>CITIZEN ↔ CITIZEN</strong>
-                <span>The GM cannot read these direct messages.</span>
+                <span>Visible to both Citizens and the GM. GM oversight is always on.</span>
               </div>
               <label>
                 <span>PLAYER-TO-PLAYER</span>
@@ -341,11 +347,13 @@ export function PrivateMessagingPanel({ room }: { room: string }) {
                   <div className="message-feed" aria-live="polite">
                     {threadMessages.length === 0 ? <p className="message-empty">No messages yet. Create an inbox link, send it privately, then begin the channel.</p> : threadMessages.map((message) => {
                       const outgoing = message.sender_kind === "gm";
+                      const observedPlayerTraffic = message.sender_kind === "citizen" && message.recipient_kind === "citizen";
+                      const routeLabel = observedPlayerTraffic ? `${message.sender_name} → ${message.recipient_name}` : outgoing ? "GM" : message.sender_name;
                       return (
-                        <article key={message.id} className={`message-bubble${outgoing ? " message-bubble--outgoing" : ""}`}>
-                          <strong>{outgoing ? "GM" : message.sender_name}</strong>
+                        <article key={message.id} className={`message-bubble${outgoing ? " message-bubble--outgoing" : ""}${observedPlayerTraffic ? " message-bubble--observed" : ""}`}>
+                          <strong>{routeLabel}</strong>
                           <p>{message.body}</p>
-                          <small>{new Date(message.created_at).toLocaleString()} · {outgoing ? message.read_at ? "READ" : "SENT" : "RECEIVED"}</small>
+                          <small>{observedPlayerTraffic ? "TABLE TRAFFIC · " : ""}{new Date(message.created_at).toLocaleString()} · {deliveryState(message, observedPlayerTraffic)}</small>
                         </article>
                       );
                     })}
